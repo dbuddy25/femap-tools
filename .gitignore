@@ -1,0 +1,8 @@
+# Reference PDFs (large, not version-controlled)
+*.pdf
+
+# macOS
+.DS_Store
+
+# Claude Code local settings
+.claude/
