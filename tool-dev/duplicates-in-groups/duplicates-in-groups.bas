@@ -127,7 +127,7 @@ Sub Main
                 ' Intersect to find shared entities
                 isectSet.Clear()
                 isectSet.AddSet(setA.ID)
-                isectSet.IntersectSet(setB.ID)
+                isectSet.RemoveNotCommon(setB.ID)
 
                 pairCounts(t, i * numGroups + j) = isectSet.Count
 
