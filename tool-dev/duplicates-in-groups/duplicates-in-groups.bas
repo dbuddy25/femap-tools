@@ -104,17 +104,20 @@ Sub Main
     Dim pr As femap.Prop
     Set pr = App.feProp
 
-    ' Track which selected groups contain the current entity
-    Dim inGroups() As Long
-    ReDim inGroups(numGroups - 1)
-    Dim inCount As Long
+    ' Reusable set for feGroupsContaining results
+    Dim containingSet As femap.Set
+    Set containingSet = App.feSet
 
     Dim entityID As Long
     Dim t As Long
-    Dim g As Long
     Dim a As Long
     Dim b As Long
+    Dim idxA As Long
+    Dim idxB As Long
+    Dim tmp As Long
     Dim scanCount As Long
+    Dim containCount As Long
+    Dim vGrpIDs As Variant
 
     App.feAppLock
 
@@ -142,27 +145,40 @@ Sub Main
                 End If
             End If
 
-            ' Check each selected group for this entity
-            inCount = 0
-            For g = 0 To numGroups - 1
-                rc = gp.Get(groupIDs(g))
-                If rc = FE_OK Then
-                    If gp.IsEntityInGroup(typeConsts(t), entityID) Then
-                        inGroups(inCount) = g
-                        inCount = inCount + 1
-                    End If
-                End If
-            Next g
+            ' Find which groups contain this entity
+            ' NOTE: negative entityID = single entity; positive = set ID
+            containingSet.Clear()
+            rc = App.feGroupsContaining(typeConsts(t), -entityID, containingSet.ID)
 
-            ' If entity is in more than one selected group, it's a duplicate
-            If inCount > 1 Then
+            ' Intersect with selected groups only
+            containingSet.IntersectSet(groupSet.ID)
+
+            If containingSet.Count > 1 Then
                 typeDupCounts(t) = typeDupCounts(t) + 1
 
-                ' Increment pair counts for all group combinations
-                For a = 0 To inCount - 2
-                    For b = a + 1 To inCount - 1
-                        pairCounts(t, inGroups(a) * numGroups + inGroups(b)) = _
-                            pairCounts(t, inGroups(a) * numGroups + inGroups(b)) + 1
+                ' Get array of group IDs this entity belongs to
+                containingSet.GetArray(containCount, vGrpIDs)
+
+                ' Increment pair counts for all combinations
+                For a = 0 To containCount - 2
+                    For b = a + 1 To containCount - 1
+                        ' Map group IDs to indices
+                        idxA = -1
+                        idxB = -1
+                        For idx = 0 To numGroups - 1
+                            If groupIDs(idx) = vGrpIDs(a) Then idxA = idx
+                            If groupIDs(idx) = vGrpIDs(b) Then idxB = idx
+                        Next idx
+                        ' Ensure idxA < idxB for consistent storage
+                        If idxA > idxB Then
+                            tmp = idxA
+                            idxA = idxB
+                            idxB = tmp
+                        End If
+                        If idxA >= 0 And idxB >= 0 Then
+                            pairCounts(t, idxA * numGroups + idxB) = _
+                                pairCounts(t, idxA * numGroups + idxB) + 1
+                        End If
                     Next b
                 Next a
             End If
