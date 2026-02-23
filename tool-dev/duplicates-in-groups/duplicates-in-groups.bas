@@ -66,13 +66,14 @@ Sub Main
     ' =============================================
     ' Section 3: Scan Each Entity Type
     ' =============================================
+    ' Group list type constants (FGR_*) for Group.List()
     Const NUM_TYPES = 5
-    Dim typeConsts(4) As Long
-    typeConsts(0) = FT_CSYS
-    typeConsts(1) = FT_NODE
-    typeConsts(2) = FT_ELEM
-    typeConsts(3) = FT_MATL
-    typeConsts(4) = FT_PROP
+    Dim listConsts(4) As Long
+    listConsts(0) = FGR_CSYS
+    listConsts(1) = FGR_NODE
+    listConsts(2) = FGR_ELEM
+    listConsts(3) = FGR_MATL
+    listConsts(4) = FGR_PROP
 
     Dim typeLabels(4) As String
     typeLabels(0) = "Coord Systems"
@@ -92,123 +93,69 @@ Sub Main
     Dim totalDups As Long
     totalDups = 0
 
-    ' Traversal objects
-    Dim nd As femap.Node
-    Set nd = App.feNode
-    Dim el As femap.Elem
-    Set el = App.feElem
-    Dim cs As femap.CSys
-    Set cs = App.feCSys
-    Dim mt As femap.Matl
-    Set mt = App.feMatl
-    Dim pr As femap.Prop
-    Set pr = App.feProp
-
-    ' Reusable set for feGroupsContaining results
-    Dim containingSet As femap.Set
-    Set containingSet = App.feSet
-
-    Dim entityID As Long
     Dim t As Long
-    Dim a As Long
-    Dim b As Long
-    Dim idxA As Long
-    Dim idxB As Long
-    Dim tmp As Long
-    Dim scanCount As Long
-    Dim containCount As Long
-    Dim vGrpIDs As Variant
+    Dim g As Long
+    Dim i As Long
+    Dim j As Long
+    Dim entityID As Long
+    Dim pairVal As Long
 
-    App.feAppLock
+    ' Reusable set for intersections
+    Dim isectSet As femap.Set
+    Set isectSet = App.feSet
+
+    ' Track unique duplicate entities per type (an entity in 3 groups
+    ' shows up in multiple pairs but should only count once)
+    Dim dupSet As femap.Set
+    Set dupSet = App.feSet
 
     For t = 0 To NUM_TYPES - 1
         typeDupCounts(t) = 0
-        scanCount = 0
+        dupSet.Clear()
 
-        ' Get first entity ID for this type
-        Select Case t
-            Case 0: entityID = cs.First()
-            Case 1: entityID = nd.First()
-            Case 2: entityID = el.First()
-            Case 3: entityID = mt.First()
-            Case 4: entityID = pr.First()
-        End Select
+        ' Get entity sets for each group via Group.List()
+        ' Store sets in an array for pairwise comparison
+        Dim grpSets() As femap.Set
+        ReDim grpSets(numGroups - 1)
 
-        Do While entityID > 0
-            scanCount = scanCount + 1
+        For g = 0 To numGroups - 1
+            rc = gp.Get(groupIDs(g))
+            If rc = FE_OK Then
+                Set grpSets(g) = gp.List(listConsts(t))
+            Else
+                Set grpSets(g) = App.feSet
+            End If
+        Next g
 
-            ' Progress for large entity types (nodes, elements)
-            If t = 1 Or t = 2 Then
-                If (scanCount Mod 10000) = 0 Then
-                    App.feAppMessage(FCM_NORMAL, _
-                        "  Scanning " + typeLabels(t) + "... " + Str$(scanCount))
+        ' Compare all pairs
+        For i = 0 To numGroups - 2
+            For j = i + 1 To numGroups - 1
+                ' Intersect copies of the two group sets
+                isectSet.Clear()
+                isectSet.AddSet(grpSets(i).ID)
+                isectSet.IntersectSet(grpSets(j).ID)
+
+                pairCounts(t, i * numGroups + j) = isectSet.Count
+
+                ' Add shared entities to dupSet for unique counting
+                If isectSet.Count > 0 Then
+                    dupSet.AddSet(isectSet.ID)
                 End If
-            End If
+            Next j
+        Next i
 
-            ' Find which groups contain this entity
-            ' NOTE: negative entityID = single entity; positive = set ID
-            containingSet.Clear()
-            rc = App.feGroupsContaining(typeConsts(t), -entityID, containingSet.ID)
-
-            ' Intersect with selected groups only
-            containingSet.IntersectSet(groupSet.ID)
-
-            If containingSet.Count > 1 Then
-                typeDupCounts(t) = typeDupCounts(t) + 1
-
-                ' Get array of group IDs this entity belongs to
-                containingSet.GetArray(containCount, vGrpIDs)
-
-                ' Increment pair counts for all combinations
-                For a = 0 To containCount - 2
-                    For b = a + 1 To containCount - 1
-                        ' Map group IDs to indices
-                        idxA = -1
-                        idxB = -1
-                        For idx = 0 To numGroups - 1
-                            If groupIDs(idx) = vGrpIDs(a) Then idxA = idx
-                            If groupIDs(idx) = vGrpIDs(b) Then idxB = idx
-                        Next idx
-                        ' Ensure idxA < idxB for consistent storage
-                        If idxA > idxB Then
-                            tmp = idxA
-                            idxA = idxB
-                            idxB = tmp
-                        End If
-                        If idxA >= 0 And idxB >= 0 Then
-                            pairCounts(t, idxA * numGroups + idxB) = _
-                                pairCounts(t, idxA * numGroups + idxB) + 1
-                        End If
-                    Next b
-                Next a
-            End If
-
-            ' Get next entity ID
-            Select Case t
-                Case 0: entityID = cs.Next()
-                Case 1: entityID = nd.Next()
-                Case 2: entityID = el.Next()
-                Case 3: entityID = mt.Next()
-                Case 4: entityID = pr.Next()
-            End Select
-        Loop
-
+        typeDupCounts(t) = dupSet.Count
         totalDups = totalDups + typeDupCounts(t)
-        App.feAppMessage(FCM_NORMAL, _
-            "  " + typeLabels(t) + ": scanned " + Str$(scanCount) + _
-            ", found " + Str$(typeDupCounts(t)) + " duplicates")
-    Next t
 
-    App.feAppUnlock
+        App.feAppMessage(FCM_NORMAL, _
+            "  " + typeLabels(t) + ": found " + Str$(typeDupCounts(t)) + " duplicates")
+    Next t
 
     ' =============================================
     ' Section 4: Report Results
     ' =============================================
-    Dim i As Long
-    Dim j As Long
     Dim countStr As String
     Dim labelPad As String
-    Dim pairVal As Long
 
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
     App.feAppMessage(FCM_HIGHLIGHT, "  Duplicates in Groups - Results")
