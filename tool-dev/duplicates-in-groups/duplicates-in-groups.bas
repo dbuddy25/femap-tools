@@ -113,22 +113,25 @@ Sub Main
 
         ' Compare all group pairs
         For i = 0 To numGroups - 2
-            ' Get entity set for group i
-            rc = gp.Get(groupIDs(i))
-            Dim setA As femap.Set
-            Set setA = gp.List(listTypes(t))
-            If setA Is Nothing Then GoTo NextI
-
             For j = i + 1 To numGroups - 1
-                ' Get entity set for group j
+                ' Get entity set for group i (re-get each pair since gp.List
+                ' returns an internal ref that gp.Get invalidates)
+                rc = gp.Get(groupIDs(i))
+                Dim setA As femap.Set
+                Set setA = gp.List(listTypes(t))
+                If setA Is Nothing Then GoTo NextJ
+
+                ' Copy setA into isectSet before loading group j
+                isectSet.Clear()
+                isectSet.AddSet(setA.ID)
+
+                ' Get entity set for group j (invalidates setA)
                 rc = gp.Get(groupIDs(j))
                 Dim setB As femap.Set
                 Set setB = gp.List(listTypes(t))
                 If setB Is Nothing Then GoTo NextJ
 
-                ' Intersect to find shared entities
-                isectSet.Clear()
-                isectSet.AddSet(setA.ID)
+                ' isectSet already holds group i's entities; intersect with group j
                 isectSet.RemoveNotCommon(setB.ID)
 
                 pairCounts(t, i * numGroups + j) = isectSet.Count
@@ -139,7 +142,6 @@ Sub Main
                 End If
 NextJ:
             Next j
-NextI:
         Next i
 
         typeDupCounts(t) = dupSet.Count
