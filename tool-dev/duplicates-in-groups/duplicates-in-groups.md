@@ -24,4 +24,3 @@ Checks for entities that appear in more than one of the user-selected groups and
 - Per-type duplicate count (warning-colored text when duplicates found)
 - Per-group-pair breakdown showing how many entities are shared between each pair
 - Grand total of all duplicate entities
-- If duplicates found, prompts to export results to a text file
