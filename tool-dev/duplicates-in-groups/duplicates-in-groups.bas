@@ -103,14 +103,13 @@ Sub Main
     Dim isectSet As femap.Set
     Set isectSet = App.feSet
 
-    ' Track unique duplicate entities per type (one Set per type, persists for group creation)
-    Dim dupSets(4) As femap.Set
-    For t = 0 To NUM_TYPES - 1
-        Set dupSets(t) = App.feSet
-    Next t
+    ' Track unique duplicate entities per type
+    Dim dupSet As femap.Set
+    Set dupSet = App.feSet
 
     For t = 0 To NUM_TYPES - 1
         typeDupCounts(t) = 0
+        dupSet.Clear()
 
         ' Compare all group pairs
         For i = 0 To numGroups - 2
@@ -137,41 +136,20 @@ Sub Main
 
                 pairCounts(t, i * numGroups + j) = isectSet.Count
 
-                ' Add to dupSets(t) for unique counting + group creation
+                ' Add to dupSet for unique counting
                 If isectSet.Count > 0 Then
-                    dupSets(t).AddSet(isectSet.ID)
+                    dupSet.AddSet(isectSet.ID)
                 End If
 NextJ:
             Next j
         Next i
 
-        typeDupCounts(t) = dupSets(t).Count
+        typeDupCounts(t) = dupSet.Count
         totalDups = totalDups + typeDupCounts(t)
     Next t
 
     ' =============================================
-    ' Section 4: Create Groups for Duplicate Entities
-    ' =============================================
-    Dim dupGroupIDs(4) As Long
-    Dim newGpID As Long
-
-    For t = 0 To NUM_TYPES - 1
-        dupGroupIDs(t) = 0
-        If typeDupCounts(t) > 0 Then
-            Dim dupGp As femap.Group
-            Set dupGp = App.feGroup
-            dupGp.title = "Dup " + typeLabels(t)
-            newGpID = dupGp.NextEmptyID
-            rc = dupGp.Put(newGpID)
-            If rc = FE_OK Then
-                dupGp.SetAdd(listTypes(t), dupSets(t).ID)
-                dupGroupIDs(t) = newGpID
-            End If
-        End If
-    Next t
-
-    ' =============================================
-    ' Section 5: Report Results
+    ' Section 4: Report Results
     ' =============================================
     Dim countStr As String
     Dim labelPad As String
@@ -202,7 +180,7 @@ NextJ:
 
         App.feAppMessage(msgColor, "  " + labelPad + countStr + " duplicates")
 
-        ' Show pair breakdown and group ID if any duplicates
+        ' Show pair breakdown if any duplicates
         If typeDupCounts(t) > 0 Then
             For i = 0 To numGroups - 2
                 For j = i + 1 To numGroups - 1
@@ -214,10 +192,6 @@ NextJ:
                     End If
                 Next j
             Next i
-            If dupGroupIDs(t) > 0 Then
-                App.feAppMessage(FCM_WARNING, "    -> Created Group" + _
-                    Str$(dupGroupIDs(t)) + ": ""Dup " + typeLabels(t) + """")
-            End If
         End If
     Next t
 
@@ -229,4 +203,54 @@ NextJ:
     End If
     App.feAppMessage(msgColor, "  Total:" + Str$(totalDups) + " duplicate entities found")
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
+
+    ' =============================================
+    ' Section 5: Optional Text File Export
+    ' =============================================
+    If totalDups > 0 Then
+        Dim ans As Long
+        ans = MsgBox("Export results to text file?", vbYesNo, "Duplicates in Groups")
+        If ans = vbYes Then
+            Dim filePath As String
+            filePath = InputBox$("Save results to:", "Export Results", "C:\temp\duplicates-in-groups.txt")
+            If filePath <> "" Then
+                Dim fNum As Long
+                fNum = FreeFile
+                Open filePath For Output As #fNum
+
+                Print #fNum, "Duplicates in Groups - Results"
+                Print #fNum, String$(40, "=")
+                Print #fNum, headerStr
+                Print #fNum, ""
+
+                For t = 0 To NUM_TYPES - 1
+                    labelPad = typeLabels(t) + ":"
+                    Do While Len(labelPad) < 18
+                        labelPad = labelPad + " "
+                    Loop
+                    Print #fNum, "  " + labelPad + Str$(typeDupCounts(t)) + " duplicates"
+
+                    If typeDupCounts(t) > 0 Then
+                        For i = 0 To numGroups - 2
+                            For j = i + 1 To numGroups - 1
+                                pairVal = pairCounts(t, i * numGroups + j)
+                                If pairVal > 0 Then
+                                    Print #fNum, "    """ + groupTitles(i) + _
+                                        """ & """ + groupTitles(j) + """:" + _
+                                        Str$(pairVal) + " shared"
+                                End If
+                            Next j
+                        Next i
+                    End If
+                Next t
+
+                Print #fNum, ""
+                Print #fNum, "  Total:" + Str$(totalDups) + " duplicate entities found"
+                Print #fNum, String$(40, "=")
+
+                Close #fNum
+                App.feAppMessage(FCM_NORMAL, "Results exported to: " + filePath)
+            End If
+        End If
+    End If
 End Sub
