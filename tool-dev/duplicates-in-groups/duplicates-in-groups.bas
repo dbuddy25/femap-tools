@@ -117,12 +117,14 @@ Sub Main
             rc = gp.Get(groupIDs(i))
             Dim setA As femap.Set
             Set setA = gp.List(listTypes(t))
+            If setA Is Nothing Then GoTo NextI
 
             For j = i + 1 To numGroups - 1
                 ' Get entity set for group j
                 rc = gp.Get(groupIDs(j))
                 Dim setB As femap.Set
                 Set setB = gp.List(listTypes(t))
+                If setB Is Nothing Then GoTo NextJ
 
                 ' Intersect to find shared entities
                 isectSet.Clear()
@@ -135,7 +137,9 @@ Sub Main
                 If isectSet.Count > 0 Then
                     dupSet.AddSet(isectSet.ID)
                 End If
+NextJ:
             Next j
+NextI:
         Next i
 
         typeDupCounts(t) = dupSet.Count
