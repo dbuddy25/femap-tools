@@ -66,26 +66,24 @@ Sub Main
     ' =============================================
     ' Section 3: Scan Each Entity Type
     ' =============================================
-    ' Entity type constants and labels
     Const NUM_TYPES = 5
     Dim typeConsts(4) As Long
-    typeConsts(0) = FT_NODE
-    typeConsts(1) = FT_ELEM
-    typeConsts(2) = FT_CSYS
+    typeConsts(0) = FT_CSYS
+    typeConsts(1) = FT_NODE
+    typeConsts(2) = FT_ELEM
     typeConsts(3) = FT_MATL
     typeConsts(4) = FT_PROP
 
     Dim typeLabels(4) As String
-    typeLabels(0) = "Nodes"
-    typeLabels(1) = "Elements"
-    typeLabels(2) = "Coord Systems"
+    typeLabels(0) = "Coord Systems"
+    typeLabels(1) = "Nodes"
+    typeLabels(2) = "Elements"
     typeLabels(3) = "Materials"
     typeLabels(4) = "Properties"
 
     ' Per-type duplicate counts
     Dim typeDupCounts(4) As Long
-    ' Per-type pair counts stored as flat 2D arrays (upper triangle)
-    ' pairCounts(t, i * numGroups + j) for i < j
+    ' Per-type pair counts stored as flat 2D array (upper triangle)
     Dim pairSize As Long
     pairSize = numGroups * numGroups
     Dim pairCounts() As Long
@@ -106,20 +104,17 @@ Sub Main
     Dim pr As femap.Prop
     Set pr = App.feProp
 
-    ' Reusable set for feGroupsContaining results
-    Dim containingSet As femap.Set
-    Set containingSet = App.feSet
+    ' Track which selected groups contain the current entity
+    Dim inGroups() As Long
+    ReDim inGroups(numGroups - 1)
+    Dim inCount As Long
 
     Dim entityID As Long
     Dim t As Long
-    Dim containCount As Long
-    Dim vGrpIDs As Variant
+    Dim g As Long
     Dim a As Long
     Dim b As Long
-    Dim idxA As Long
-    Dim idxB As Long
     Dim scanCount As Long
-    Dim tmp As Long
 
     App.feAppLock
 
@@ -129,9 +124,9 @@ Sub Main
 
         ' Get first entity ID for this type
         Select Case t
-            Case 0: entityID = nd.First()
-            Case 1: entityID = el.First()
-            Case 2: entityID = cs.First()
+            Case 0: entityID = cs.First()
+            Case 1: entityID = nd.First()
+            Case 2: entityID = el.First()
             Case 3: entityID = mt.First()
             Case 4: entityID = pr.First()
         End Select
@@ -140,61 +135,52 @@ Sub Main
             scanCount = scanCount + 1
 
             ' Progress for large entity types (nodes, elements)
-            If t <= 1 Then
+            If t = 1 Or t = 2 Then
                 If (scanCount Mod 10000) = 0 Then
-                    App.feAppMessage(FCM_NORMAL, "  Scanning " + typeLabels(t) + "... " + Str$(scanCount))
+                    App.feAppMessage(FCM_NORMAL, _
+                        "  Scanning " + typeLabels(t) + "... " + Str$(scanCount))
                 End If
             End If
 
-            containingSet.Clear()
-            rc = App.feGroupsContaining(typeConsts(t), entityID, containingSet.ID)
-
-            If rc = FE_OK Then
-                ' Intersect with selected groups only
-                containingSet.IntersectSet(groupSet.ID)
-
-                If containingSet.Count > 1 Then
-                    typeDupCounts(t) = typeDupCounts(t) + 1
-
-                    ' Get array of group IDs this entity belongs to
-                    containingSet.GetArray(containCount, vGrpIDs)
-
-                    ' Increment pair counts for all combinations
-                    For a = 0 To containCount - 2
-                        For b = a + 1 To containCount - 1
-                            ' Map group IDs to indices
-                            idxA = -1
-                            idxB = -1
-                            For idx = 0 To numGroups - 1
-                                If groupIDs(idx) = vGrpIDs(a) Then idxA = idx
-                                If groupIDs(idx) = vGrpIDs(b) Then idxB = idx
-                            Next idx
-                            ' Ensure idxA < idxB for consistent storage
-                            If idxA > idxB Then
-                                tmp = idxA
-                                idxA = idxB
-                                idxB = tmp
-                            End If
-                            If idxA >= 0 And idxB >= 0 Then
-                                pairCounts(t, idxA * numGroups + idxB) = _
-                                    pairCounts(t, idxA * numGroups + idxB) + 1
-                            End If
-                        Next b
-                    Next a
+            ' Check each selected group for this entity
+            inCount = 0
+            For g = 0 To numGroups - 1
+                rc = gp.Get(groupIDs(g))
+                If rc = FE_OK Then
+                    If gp.IsEntityInGroup(typeConsts(t), entityID) Then
+                        inGroups(inCount) = g
+                        inCount = inCount + 1
+                    End If
                 End If
+            Next g
+
+            ' If entity is in more than one selected group, it's a duplicate
+            If inCount > 1 Then
+                typeDupCounts(t) = typeDupCounts(t) + 1
+
+                ' Increment pair counts for all group combinations
+                For a = 0 To inCount - 2
+                    For b = a + 1 To inCount - 1
+                        pairCounts(t, inGroups(a) * numGroups + inGroups(b)) = _
+                            pairCounts(t, inGroups(a) * numGroups + inGroups(b)) + 1
+                    Next b
+                Next a
             End If
 
             ' Get next entity ID
             Select Case t
-                Case 0: entityID = nd.Next()
-                Case 1: entityID = el.Next()
-                Case 2: entityID = cs.Next()
+                Case 0: entityID = cs.Next()
+                Case 1: entityID = nd.Next()
+                Case 2: entityID = el.Next()
                 Case 3: entityID = mt.Next()
                 Case 4: entityID = pr.Next()
             End Select
         Loop
 
         totalDups = totalDups + typeDupCounts(t)
+        App.feAppMessage(FCM_NORMAL, _
+            "  " + typeLabels(t) + ": scanned " + Str$(scanCount) + _
+            ", found " + Str$(typeDupCounts(t)) + " duplicates")
     Next t
 
     App.feAppUnlock
