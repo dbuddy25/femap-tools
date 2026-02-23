@@ -162,9 +162,9 @@ NextJ:
             Set dupGp = App.feGroup
             dupGp.title = "Dup " + typeLabels(t)
             newGpID = dupGp.NextEmptyID
-            dupGp.SetAdd(listTypes(t), dupSets(t).ID)
             rc = dupGp.Put(newGpID)
             If rc = FE_OK Then
+                dupGp.SetAdd(listTypes(t), dupSets(t).ID)
                 dupGroupIDs(t) = newGpID
             End If
         End If
