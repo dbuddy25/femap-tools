@@ -173,7 +173,7 @@ NextJ:
 
         ' Warning color for non-zero counts, normal for zero
         If typeDupCounts(t) > 0 Then
-            msgColor = FCM_WARNING
+            msgColor = FCM_ERROR
         Else
             msgColor = FCM_NORMAL
         End If
@@ -186,7 +186,7 @@ NextJ:
                 For j = i + 1 To numGroups - 1
                     pairVal = pairCounts(t, i * numGroups + j)
                     If pairVal > 0 Then
-                        App.feAppMessage(FCM_WARNING, "    """ + groupTitles(i) + _
+                        App.feAppMessage(FCM_ERROR, "    """ + groupTitles(i) + _
                             """ & """ + groupTitles(j) + """:" + _
                             Str$(pairVal) + " shared")
                     End If
@@ -197,7 +197,7 @@ NextJ:
 
     App.feAppMessage(FCM_NORMAL, "")
     If totalDups > 0 Then
-        msgColor = FCM_WARNING
+        msgColor = FCM_ERROR
     Else
         msgColor = FCM_HIGHLIGHT
     End If
