@@ -121,7 +121,7 @@ Sub Main
     Dim scanCount As Long
     Dim tmp As Long
 
-    App.feAppLock(True)
+    App.feAppLock
 
     For t = 0 To NUM_TYPES - 1
         typeDupCounts(t) = 0
@@ -197,7 +197,7 @@ Sub Main
         totalDups = totalDups + typeDupCounts(t)
     Next t
 
-    App.feAppLock(False)
+    App.feAppUnlock
 
     ' =============================================
     ' Section 4: Report Results
