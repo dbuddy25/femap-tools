@@ -66,14 +66,15 @@ Sub Main
     ' =============================================
     ' Section 3: Scan Each Entity Type
     ' =============================================
-    ' Group list type constants (FGR_*) for Group.List()
+    ' Group.List() integer types (from API PDF):
+    '   0=CSys, 7=Node, 8=Elem, 9=Material, 10=Property
     Const NUM_TYPES = 5
-    Dim listConsts(4) As Long
-    listConsts(0) = FGR_CSYS
-    listConsts(1) = FGR_NODE
-    listConsts(2) = FGR_ELEM
-    listConsts(3) = FGR_MATL
-    listConsts(4) = FGR_PROP
+    Dim listTypes(4) As Long
+    listTypes(0) = 0
+    listTypes(1) = 7
+    listTypes(2) = 8
+    listTypes(3) = 9
+    listTypes(4) = 10
 
     Dim typeLabels(4) As String
     typeLabels(0) = "Coord Systems"
@@ -94,18 +95,15 @@ Sub Main
     totalDups = 0
 
     Dim t As Long
-    Dim g As Long
     Dim i As Long
     Dim j As Long
-    Dim entityID As Long
     Dim pairVal As Long
 
     ' Reusable set for intersections
     Dim isectSet As femap.Set
     Set isectSet = App.feSet
 
-    ' Track unique duplicate entities per type (an entity in 3 groups
-    ' shows up in multiple pairs but should only count once)
+    ' Track unique duplicate entities per type
     Dim dupSet As femap.Set
     Set dupSet = App.feSet
 
@@ -113,31 +111,27 @@ Sub Main
         typeDupCounts(t) = 0
         dupSet.Clear()
 
-        ' Get entity sets for each group via Group.List()
-        ' Store sets in an array for pairwise comparison
-        Dim grpSets() As femap.Set
-        ReDim grpSets(numGroups - 1)
-
-        For g = 0 To numGroups - 1
-            rc = gp.Get(groupIDs(g))
-            If rc = FE_OK Then
-                Set grpSets(g) = gp.List(listConsts(t))
-            Else
-                Set grpSets(g) = App.feSet
-            End If
-        Next g
-
-        ' Compare all pairs
+        ' Compare all group pairs
         For i = 0 To numGroups - 2
+            ' Get entity set for group i
+            rc = gp.Get(groupIDs(i))
+            Dim setA As femap.Set
+            Set setA = gp.List(listTypes(t))
+
             For j = i + 1 To numGroups - 1
-                ' Intersect copies of the two group sets
+                ' Get entity set for group j
+                rc = gp.Get(groupIDs(j))
+                Dim setB As femap.Set
+                Set setB = gp.List(listTypes(t))
+
+                ' Intersect to find shared entities
                 isectSet.Clear()
-                isectSet.AddSet(grpSets(i).ID)
-                isectSet.IntersectSet(grpSets(j).ID)
+                isectSet.AddSet(setA.ID)
+                isectSet.IntersectSet(setB.ID)
 
                 pairCounts(t, i * numGroups + j) = isectSet.Count
 
-                ' Add shared entities to dupSet for unique counting
+                ' Add to dupSet for unique counting
                 If isectSet.Count > 0 Then
                     dupSet.AddSet(isectSet.ID)
                 End If
@@ -146,9 +140,6 @@ Sub Main
 
         typeDupCounts(t) = dupSet.Count
         totalDups = totalDups + typeDupCounts(t)
-
-        App.feAppMessage(FCM_NORMAL, _
-            "  " + typeLabels(t) + ": found " + Str$(typeDupCounts(t)) + " duplicates")
     Next t
 
     ' =============================================
