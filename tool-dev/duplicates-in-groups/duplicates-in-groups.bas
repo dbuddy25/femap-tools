@@ -103,13 +103,14 @@ Sub Main
     Dim isectSet As femap.Set
     Set isectSet = App.feSet
 
-    ' Track unique duplicate entities per type
-    Dim dupSet As femap.Set
-    Set dupSet = App.feSet
+    ' Track unique duplicate entities per type (one Set per type, persists for group creation)
+    Dim dupSets(4) As femap.Set
+    For t = 0 To NUM_TYPES - 1
+        Set dupSets(t) = App.feSet
+    Next t
 
     For t = 0 To NUM_TYPES - 1
         typeDupCounts(t) = 0
-        dupSet.Clear()
 
         ' Compare all group pairs
         For i = 0 To numGroups - 2
@@ -136,20 +137,41 @@ Sub Main
 
                 pairCounts(t, i * numGroups + j) = isectSet.Count
 
-                ' Add to dupSet for unique counting
+                ' Add to dupSets(t) for unique counting + group creation
                 If isectSet.Count > 0 Then
-                    dupSet.AddSet(isectSet.ID)
+                    dupSets(t).AddSet(isectSet.ID)
                 End If
 NextJ:
             Next j
         Next i
 
-        typeDupCounts(t) = dupSet.Count
+        typeDupCounts(t) = dupSets(t).Count
         totalDups = totalDups + typeDupCounts(t)
     Next t
 
     ' =============================================
-    ' Section 4: Report Results
+    ' Section 4: Create Groups for Duplicate Entities
+    ' =============================================
+    Dim dupGroupIDs(4) As Long
+    Dim newGpID As Long
+
+    For t = 0 To NUM_TYPES - 1
+        dupGroupIDs(t) = 0
+        If typeDupCounts(t) > 0 Then
+            Dim dupGp As femap.Group
+            Set dupGp = App.feGroup
+            dupGp.title = "Dup " + typeLabels(t)
+            newGpID = dupGp.NextEmptyID
+            dupGp.SetAdd(listTypes(t), dupSets(t).ID)
+            rc = dupGp.Put(newGpID)
+            If rc = FE_OK Then
+                dupGroupIDs(t) = newGpID
+            End If
+        End If
+    Next t
+
+    ' =============================================
+    ' Section 5: Report Results
     ' =============================================
     Dim countStr As String
     Dim labelPad As String
@@ -160,6 +182,8 @@ NextJ:
     App.feAppMessage(FCM_NORMAL, headerStr)
     App.feAppMessage(FCM_NORMAL, "")
 
+    Dim msgColor As Long
+
     For t = 0 To NUM_TYPES - 1
         countStr = Str$(typeDupCounts(t))
 
@@ -169,24 +193,40 @@ NextJ:
             labelPad = labelPad + " "
         Loop
 
-        App.feAppMessage(FCM_NORMAL, "  " + labelPad + countStr + " duplicates")
+        ' Warning color for non-zero counts, normal for zero
+        If typeDupCounts(t) > 0 Then
+            msgColor = FCM_WARNING
+        Else
+            msgColor = FCM_NORMAL
+        End If
 
-        ' Show pair breakdown if any duplicates
+        App.feAppMessage(msgColor, "  " + labelPad + countStr + " duplicates")
+
+        ' Show pair breakdown and group ID if any duplicates
         If typeDupCounts(t) > 0 Then
             For i = 0 To numGroups - 2
                 For j = i + 1 To numGroups - 1
                     pairVal = pairCounts(t, i * numGroups + j)
                     If pairVal > 0 Then
-                        App.feAppMessage(FCM_NORMAL, "    """ + groupTitles(i) + _
+                        App.feAppMessage(FCM_WARNING, "    """ + groupTitles(i) + _
                             """ & """ + groupTitles(j) + """:" + _
                             Str$(pairVal) + " shared")
                     End If
                 Next j
             Next i
+            If dupGroupIDs(t) > 0 Then
+                App.feAppMessage(FCM_WARNING, "    -> Created Group" + _
+                    Str$(dupGroupIDs(t)) + ": ""Dup " + typeLabels(t) + """")
+            End If
         End If
     Next t
 
     App.feAppMessage(FCM_NORMAL, "")
-    App.feAppMessage(FCM_HIGHLIGHT, "  Total:" + Str$(totalDups) + " duplicate entities found")
+    If totalDups > 0 Then
+        msgColor = FCM_WARNING
+    Else
+        msgColor = FCM_HIGHLIGHT
+    End If
+    App.feAppMessage(msgColor, "  Total:" + Str$(totalDups) + " duplicate entities found")
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
 End Sub

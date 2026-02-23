@@ -21,12 +21,7 @@ Checks for entities that appear in more than one of the user-selected groups and
 
 ## Output
 
-- Per-type duplicate count
+- Per-type duplicate count (warning-colored text when duplicates found)
 - Per-group-pair breakdown showing how many entities are shared between each pair
+- For each type with duplicates, a new Femap group is created (e.g. "Dup Nodes", "Dup Elements") containing the duplicate entity IDs
 - Grand total of all duplicate entities
-
-## Performance
-
-- Uses `feAppLock` to suppress UI redraws during scanning
-- Prints progress every 10,000 entities for nodes and elements (which can be large)
-- Materials, properties, and coordinate systems are typically small and scan quickly
