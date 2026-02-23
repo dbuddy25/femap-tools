@@ -1,8 +1,5 @@
-# Reference PDFs (large, not version-controlled)
-*.pdf
-
-# macOS
+# Only tool-dev/ should be pushed
+/*
+!.gitignore
+!tool-dev/
 .DS_Store
-
-# Claude Code local settings
-.claude/
