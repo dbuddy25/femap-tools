@@ -211,8 +211,18 @@ NextJ:
         Dim ans As Long
         ans = MsgBox("Export results to text file?", vbYesNo, "Duplicates in Groups")
         If ans = vbYes Then
+            ' Default to same directory as model file
+            Dim defaultPath As String
+            Dim modelFile As String
+            modelFile = App.ModelName
+            If modelFile <> "" Then
+                defaultPath = Left$(modelFile, InStrRev(modelFile, "\")) + "duplicates-in-groups.txt"
+            Else
+                defaultPath = "C:\temp\duplicates-in-groups.txt"
+            End If
+
             Dim filePath As String
-            filePath = InputBox$("Save results to:", "Export Results", "C:\temp\duplicates-in-groups.txt")
+            filePath = InputBox$("Save results to:", "Export Results", defaultPath)
             If filePath <> "" Then
                 Dim fNum As Long
                 fNum = FreeFile
