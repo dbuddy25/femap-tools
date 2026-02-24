@@ -1,62 +1,53 @@
 ' renumber-groups.bas
 ' Renumbers all entities (nodes, elements, csys, materials, properties) in
 ' selected groups into non-overlapping ID ranges with growth buffer.
+' Uses Excel spreadsheet for interactive confirmation and editing.
 
 Const NUM_TYPES = 5
 
-' Module-level variables shared between Sub Main and dialog
-Dim mApp As femap.model
-Dim mNumGroups As Long
-Dim mGroupIDs() As Long
-Dim mGroupTitles() As String
-Dim mEntityCounts() As Long
-Dim mMaxCount() As Long
-Dim mRangeSize() As Long
-Dim mStartIDs() As Long
-Dim mListTypes(4) As Long
-Dim mAllFtTypes(4) As Long
-Dim mTypeLabels(4) As String
-Dim mConflictText As String
-
 Sub Main
-    Set mApp = feFemap()
+    Dim App As femap.model
+    Set App = feFemap()
     Dim rc As Long
 
     ' =============================================
     ' Section 1: Group Selection
     ' =============================================
     Dim groupSet As femap.Set
-    Set groupSet = mApp.feSet
+    Set groupSet = App.feSet
 
     rc = groupSet.Select(FT_GROUP, True, "Select Groups to Renumber")
     If rc <> FE_OK Then
-        mApp.feAppMessage(FCM_WARNING, "No groups selected - exiting")
+        App.feAppMessage(FCM_WARNING, "No groups selected - exiting")
         Exit Sub
     End If
 
     If groupSet.Count < 1 Then
-        mApp.feAppMessage(FCM_ERROR, "Must select at least 1 group - exiting")
+        App.feAppMessage(FCM_ERROR, "Must select at least 1 group - exiting")
         Exit Sub
     End If
 
-    mNumGroups = groupSet.Count
-    ReDim mGroupIDs(mNumGroups - 1)
-    ReDim mGroupTitles(mNumGroups - 1)
+    Dim numGroups As Long
+    numGroups = groupSet.Count
+    Dim groupIDs() As Long
+    Dim groupTitles() As String
+    ReDim groupIDs(numGroups - 1)
+    ReDim groupTitles(numGroups - 1)
 
     Dim gp As femap.Group
-    Set gp = mApp.feGroup
+    Set gp = App.feGroup
     Dim gpID As Long
     Dim idx As Long
     idx = 0
 
     gpID = groupSet.First()
     Do While gpID > 0
-        mGroupIDs(idx) = gpID
+        groupIDs(idx) = gpID
         rc = gp.Get(gpID)
         If rc = FE_OK Then
-            mGroupTitles(idx) = gp.title
+            groupTitles(idx) = gp.title
         Else
-            mGroupTitles(idx) = "Group " + Str$(gpID)
+            groupTitles(idx) = "Group " + Str$(gpID)
         End If
         idx = idx + 1
         gpID = groupSet.Next()
@@ -71,55 +62,60 @@ Sub Main
     '   Property: list=10, ft=FT_PROP(11)
     '   Element:  list=8,  ft=FT_ELEM(8)
     '   Node:     list=7,  ft=FT_NODE(7)
-    mListTypes(0) = 0   ' CSys
-    mListTypes(1) = 9   ' Material
-    mListTypes(2) = 10  ' Property
-    mListTypes(3) = 8   ' Element
-    mListTypes(4) = 7   ' Node
+    Dim listTypes(4) As Long
+    listTypes(0) = 0   ' CSys
+    listTypes(1) = 9   ' Material
+    listTypes(2) = 10  ' Property
+    listTypes(3) = 8   ' Element
+    listTypes(4) = 7   ' Node
 
-    mAllFtTypes(0) = FT_CSYS
-    mAllFtTypes(1) = FT_MATL
-    mAllFtTypes(2) = FT_PROP
-    mAllFtTypes(3) = FT_ELEM
-    mAllFtTypes(4) = FT_NODE
+    Dim allFtTypes(4) As Long
+    allFtTypes(0) = FT_CSYS
+    allFtTypes(1) = FT_MATL
+    allFtTypes(2) = FT_PROP
+    allFtTypes(3) = FT_ELEM
+    allFtTypes(4) = FT_NODE
 
-    mTypeLabels(0) = "CSys"
-    mTypeLabels(1) = "Matl"
-    mTypeLabels(2) = "Prop"
-    mTypeLabels(3) = "Elem"
-    mTypeLabels(4) = "Node"
+    Dim typeLabels(4) As String
+    typeLabels(0) = "CSys"
+    typeLabels(1) = "Matl"
+    typeLabels(2) = "Prop"
+    typeLabels(3) = "Elem"
+    typeLabels(4) = "Node"
 
-    ReDim mEntityCounts(mNumGroups - 1, NUM_TYPES - 1)
-    ReDim mMaxCount(mNumGroups - 1)
+    Dim entityCounts() As Long
+    Dim maxCount() As Long
+    ReDim entityCounts(numGroups - 1, NUM_TYPES - 1)
+    ReDim maxCount(numGroups - 1)
 
     Dim copySet As femap.Set
-    Set copySet = mApp.feSet
+    Set copySet = App.feSet
 
     Dim g As Long
     Dim t As Long
 
-    For g = 0 To mNumGroups - 1
-        mMaxCount(g) = 0
+    For g = 0 To numGroups - 1
+        maxCount(g) = 0
         For t = 0 To NUM_TYPES - 1
-            rc = gp.Get(mGroupIDs(g))
+            rc = gp.Get(groupIDs(g))
             If rc <> FE_OK Then
-                mEntityCounts(g, t) = 0
+                entityCounts(g, t) = 0
                 GoTo NextType
             End If
 
             Dim entSet As femap.Set
-            Set entSet = gp.List(mListTypes(t))
+            Set entSet = gp.List(listTypes(t))
             If entSet Is Nothing Then
-                mEntityCounts(g, t) = 0
+                entityCounts(g, t) = 0
             Else
                 ' Copy to avoid stale ref
                 copySet.Clear()
                 copySet.AddSet(entSet.ID)
-                mEntityCounts(g, t) = copySet.Count
+                entityCounts(g, t) = copySet.Count
             End If
 
-            If mEntityCounts(g, t) > mMaxCount(g) Then
-                mMaxCount(g) = mEntityCounts(g, t)
+            If entityCounts(g, t) > maxCount(g) Then
+                maxCount(g) = entityCounts(g, t)
             End If
 NextType:
         Next t
@@ -128,37 +124,234 @@ NextType:
     ' =============================================
     ' Section 3: Calculate Range Sizes
     ' =============================================
-    ReDim mRangeSize(mNumGroups - 1)
-    ReDim mStartIDs(mNumGroups - 1)
+    Dim rangeSize() As Long
+    Dim startIDs() As Long
+    ReDim rangeSize(numGroups - 1)
+    ReDim startIDs(numGroups - 1)
 
     ' Range size per group: maxCount * 1.5 rounded up to nearest 1000, min 1000
-    For g = 0 To mNumGroups - 1
-        If mMaxCount(g) = 0 Then
-            mRangeSize(g) = 1000
+    For g = 0 To numGroups - 1
+        If maxCount(g) = 0 Then
+            rangeSize(g) = 1000
         Else
-            mRangeSize(g) = Int((mMaxCount(g) * 1.5) / 1000 + 0.999) * 1000
-            If mRangeSize(g) < 1000 Then mRangeSize(g) = 1000
+            rangeSize(g) = Int((maxCount(g) * 1.5) / 1000 + 0.999) * 1000
+            If rangeSize(g) < 1000 Then rangeSize(g) = 1000
         End If
     Next g
 
     ' =============================================
-    ' Section 4: Show Dialog
+    ' Section 4: Excel Confirmation
     ' =============================================
-    Begin Dialog RenumberDialog 420, 340, "Renumber Groups", .RenumberDlgFunc
-        Text 10, 6, 400, 180, "", .tableLabel
-        Text 10, 192, 65, 14, "Start ID:"
-        TextBox 80, 190, 80, 14, .startID
-        PushButton 170, 189, 80, 16, "Recalculate", .btnRecalc
-        Text 10, 212, 400, 80, "", .conflictLabel
-        OKButton 100, 304, 90, 22
-        CancelButton 220, 304, 90, 22
-    End Dialog
+    Dim xlApp As Object
+    Dim xlWB As Object
+    Dim ws As Object
 
-    Dim dlg As RenumberDialog
-    dlg.startID = "100000"
+    On Error Resume Next
+    Set xlApp = CreateObject("Excel.Application")
+    If xlApp Is Nothing Then
+        On Error GoTo 0
+        App.feAppMessage(FCM_ERROR, "Failed to open Excel - exiting")
+        Exit Sub
+    End If
+    On Error GoTo 0
 
-    If Dialog(dlg) <> -1 Then
-        mApp.feAppMessage(FCM_WARNING, "Cancelled by user - exiting")
+    xlApp.Visible = True
+    Set xlWB = xlApp.Workbooks.Add
+    Set ws = xlWB.Sheets(1)
+    ws.Name = "Renumber Groups"
+
+    ' -- Headers --
+    ws.Cells(1, 1).Value = "Group Name"
+    ws.Cells(1, 2).Value = "CSys"
+    ws.Cells(1, 3).Value = "Matl"
+    ws.Cells(1, 4).Value = "Prop"
+    ws.Cells(1, 5).Value = "Elem"
+    ws.Cells(1, 6).Value = "Node"
+    ws.Cells(1, 7).Value = "Max"
+    ws.Cells(1, 8).Value = "Start ID"
+    ws.Cells(1, 9).Value = "End ID"
+    ws.Cells(1, 10).Value = "Range Size"
+
+    ' Bold headers
+    ws.Range("A1:J1").Font.Bold = True
+
+    ' -- Data rows --
+    For g = 0 To numGroups - 1
+        Dim r As Long
+        r = g + 2  ' Row index (1-based, row 1 = headers)
+
+        ws.Cells(r, 1).Value = groupTitles(g)
+        ws.Cells(r, 2).Value = entityCounts(g, 0)  ' CSys
+        ws.Cells(r, 3).Value = entityCounts(g, 1)  ' Matl
+        ws.Cells(r, 4).Value = entityCounts(g, 2)  ' Prop
+        ws.Cells(r, 5).Value = entityCounts(g, 3)  ' Elem
+        ws.Cells(r, 6).Value = entityCounts(g, 4)  ' Node
+        ws.Cells(r, 7).Value = maxCount(g)
+
+        ' Start ID: first row = 100000, subsequent rows = formula chaining
+        If g = 0 Then
+            ws.Cells(r, 8).Value = 100000
+        Else
+            ws.Cells(r, 8).Formula = "=H" & CStr(r - 1) & "+J" & CStr(r - 1)
+        End If
+
+        ' End ID: formula = Start ID + Range Size - 1
+        ws.Cells(r, 9).Formula = "=H" & CStr(r) & "+J" & CStr(r) & "-1"
+
+        ' Range Size: pre-filled with calculated value
+        ws.Cells(r, 10).Value = rangeSize(g)
+    Next g
+
+    ' -- Formatting --
+    ' Yellow background for editable Start ID column (H)
+    Dim lastRow As Long
+    lastRow = numGroups + 1
+    ws.Range("H2:H" & CStr(lastRow)).Interior.Color = RGB(255, 255, 153)
+    ' Light yellow for editable Range Size column (J)
+    ws.Range("J2:J" & CStr(lastRow)).Interior.Color = RGB(255, 255, 204)
+
+    ' Auto-fit columns
+    ws.Columns("A:J").AutoFit
+
+    ' -- Sheet protection: lock all except H and J --
+    ws.Columns("H").Locked = False
+    ws.Columns("J").Locked = False
+    ws.Protect Password:=""
+
+    ' -- Wait for user --
+    Dim msgResult As Long
+    msgResult = MsgBox("Edit Start IDs (yellow) and Range Sizes (light yellow) in Excel," & _
+        Chr$(10) & "then click OK to proceed or Cancel to abort.", _
+        vbOKCancel + vbInformation, "Renumber Groups")
+
+    ' -- Read back values --
+    Dim xlClosed As Boolean
+    xlClosed = False
+
+    If msgResult <> vbOK Then
+        ' User cancelled
+        On Error Resume Next
+        xlWB.Close False
+        xlApp.Quit
+        Set ws = Nothing
+        Set xlWB = Nothing
+        Set xlApp = Nothing
+        On Error GoTo 0
+        App.feAppMessage(FCM_WARNING, "Cancelled by user - exiting")
+        Exit Sub
+    End If
+
+    ' Check that Excel is still open before reading
+    On Error Resume Next
+    Dim testVal As Variant
+    testVal = ws.Cells(1, 1).Value
+    If Err.Number <> 0 Then
+        xlClosed = True
+    End If
+    On Error GoTo 0
+
+    If xlClosed Then
+        Set ws = Nothing
+        Set xlWB = Nothing
+        Set xlApp = Nothing
+        App.feAppMessage(FCM_ERROR, "Excel was closed before values could be read - exiting")
+        Exit Sub
+    End If
+
+    ' Read Start IDs and Range Sizes from Excel
+    For g = 0 To numGroups - 1
+        startIDs(g) = CLng(ws.Cells(g + 2, 8).Value)   ' Column H
+        rangeSize(g) = CLng(ws.Cells(g + 2, 10).Value)  ' Column J
+    Next g
+
+    ' Close Excel
+    On Error Resume Next
+    xlWB.Close False
+    xlApp.Quit
+    On Error GoTo 0
+    Set ws = Nothing
+    Set xlWB = Nothing
+    Set xlApp = Nothing
+
+    ' -- Conflict check --
+    Dim conflictText As String
+    conflictText = ""
+    Dim conflictCount As Long
+    conflictCount = 0
+
+    Dim allEntSet As femap.Set
+    Set allEntSet = App.feSet
+    Dim rangeCheckSet As femap.Set
+    Set rangeCheckSet = App.feSet
+    Dim checkSet As femap.Set
+    Set checkSet = App.feSet
+
+    For t = 0 To NUM_TYPES - 1
+        ' Get all entities of this type in the model
+        allEntSet.Clear()
+        allEntSet.AddAll(allFtTypes(t))
+        If allEntSet.Count = 0 Then GoTo NextConflictType
+
+        ' Remove entities that belong to any selected group
+        For g = 0 To numGroups - 1
+            rc = gp.Get(groupIDs(g))
+            If rc = FE_OK Then
+                Dim gpEntSet As femap.Set
+                Set gpEntSet = gp.List(listTypes(t))
+                If Not gpEntSet Is Nothing Then
+                    copySet.Clear()
+                    copySet.AddSet(gpEntSet.ID)
+                    allEntSet.RemoveSet(copySet.ID)
+                End If
+            End If
+        Next g
+
+        ' allEntSet now contains only entities outside the selected groups
+        ' Check each target range for overlap
+        If allEntSet.Count > 0 Then
+            For g = 0 To numGroups - 1
+                rangeCheckSet.Clear()
+                rangeCheckSet.AddRange(startIDs(g), 1, startIDs(g) + rangeSize(g) - 1)
+                checkSet.Clear()
+                checkSet.AddSet(allEntSet.ID)
+                checkSet.RemoveNotCommon(rangeCheckSet.ID)
+                If checkSet.Count > 0 Then
+                    If conflictCount > 0 Then conflictText = conflictText + Chr$(10)
+                    conflictText = conflictText + "WARNING:" + Str$(checkSet.Count) + _
+                        " " + typeLabels(t) + " in range" + _
+                        Str$(startIDs(g)) + " -" + Str$(startIDs(g) + rangeSize(g) - 1)
+                    conflictCount = conflictCount + 1
+                End If
+            Next g
+        End If
+NextConflictType:
+    Next t
+
+    ' -- Confirmation MsgBox --
+    Dim totalEntities As Long
+    totalEntities = 0
+    For g = 0 To numGroups - 1
+        For t = 0 To NUM_TYPES - 1
+            totalEntities = totalEntities + entityCounts(g, t)
+        Next t
+    Next g
+
+    Dim confirmMsg As String
+    Dim confirmStyle As Long
+    If conflictCount = 0 Then
+        confirmMsg = Str$(numGroups) + " groups," + Str$(totalEntities) + " entities." + _
+            Chr$(10) + "No conflicts with existing IDs." + _
+            Chr$(10) + Chr$(10) + "Proceed with renumbering?"
+        confirmStyle = vbOKCancel + vbInformation
+    Else
+        confirmMsg = Str$(numGroups) + " groups," + Str$(totalEntities) + " entities." + _
+            Chr$(10) + Chr$(10) + conflictText + _
+            Chr$(10) + Chr$(10) + "Proceed anyway?"
+        confirmStyle = vbOKCancel + vbExclamation
+    End If
+
+    If MsgBox(confirmMsg, confirmStyle, "Renumber Groups - Confirm") <> vbOK Then
+        App.feAppMessage(FCM_WARNING, "Cancelled by user - exiting")
         Exit Sub
     End If
 
@@ -172,21 +365,21 @@ NextType:
     xyzOrder(2) = 0
 
     Dim workSet As femap.Set
-    Set workSet = mApp.feSet
+    Set workSet = App.feSet
 
     Dim renumCounts() As Long
-    ReDim renumCounts(mNumGroups - 1, NUM_TYPES - 1)
+    ReDim renumCounts(numGroups - 1, NUM_TYPES - 1)
 
-    For g = 0 To mNumGroups - 1
+    For g = 0 To numGroups - 1
         For t = 0 To NUM_TYPES - 1
             renumCounts(g, t) = 0
 
             ' Get entity set from group (must re-get each time due to stale ref)
-            rc = gp.Get(mGroupIDs(g))
+            rc = gp.Get(groupIDs(g))
             If rc <> FE_OK Then GoTo NextRenum
 
             Dim renumEntSet As femap.Set
-            Set renumEntSet = gp.List(mListTypes(t))
+            Set renumEntSet = gp.List(listTypes(t))
             If renumEntSet Is Nothing Then GoTo NextRenum
 
             ' Copy to working set (stale-ref pattern)
@@ -196,13 +389,13 @@ NextType:
 
             renumCounts(g, t) = workSet.Count
 
-            rc = mApp.feRenumberOpt2(mAllFtTypes(t), workSet.ID, mStartIDs(g), _
+            rc = App.feRenumberOpt2(allFtTypes(t), workSet.ID, startIDs(g), _
                 0, 0, False, False, False, xyzOrder)
 NextRenum:
         Next t
     Next g
 
-    mApp.feViewRegenerate(0)
+    App.feViewRegenerate(0)
 
     ' =============================================
     ' Section 6: Report Results
@@ -214,20 +407,12 @@ NextRenum:
     reportLabels(3) = "Elements"
     reportLabels(4) = "Nodes"
 
-    Dim totalEntities As Long
-    totalEntities = 0
-    For g = 0 To mNumGroups - 1
-        For t = 0 To NUM_TYPES - 1
-            totalEntities = totalEntities + mEntityCounts(g, t)
-        Next t
-    Next g
+    App.feAppMessage(FCM_HIGHLIGHT, "========================================")
+    App.feAppMessage(FCM_HIGHLIGHT, "  Renumber Groups - Results")
+    App.feAppMessage(FCM_HIGHLIGHT, "========================================")
 
-    mApp.feAppMessage(FCM_HIGHLIGHT, "========================================")
-    mApp.feAppMessage(FCM_HIGHLIGHT, "  Renumber Groups - Results")
-    mApp.feAppMessage(FCM_HIGHLIGHT, "========================================")
-
-    For g = 0 To mNumGroups - 1
-        mApp.feAppMessage(FCM_HIGHLIGHT, "  """ + mGroupTitles(g) + """ (start ID:" + Str$(mStartIDs(g)) + ")")
+    For g = 0 To numGroups - 1
+        App.feAppMessage(FCM_HIGHLIGHT, "  """ + groupTitles(g) + """ (start ID:" + Str$(startIDs(g)) + ")")
 
         Dim grpRenumTotal As Long
         grpRenumTotal = 0
@@ -239,200 +424,16 @@ NextRenum:
                 Do While Len(labelPad) < 16
                     labelPad = labelPad + " "
                 Loop
-                mApp.feAppMessage(FCM_NORMAL, "    " + labelPad + Str$(renumCounts(g, t)) + " renumbered")
+                App.feAppMessage(FCM_NORMAL, "    " + labelPad + Str$(renumCounts(g, t)) + " renumbered")
             End If
         Next t
 
         If grpRenumTotal = 0 Then
-            mApp.feAppMessage(FCM_NORMAL, "    (no entities)")
+            App.feAppMessage(FCM_NORMAL, "    (no entities)")
         End If
     Next g
 
-    mApp.feAppMessage(FCM_NORMAL, "")
-    mApp.feAppMessage(FCM_HIGHLIGHT, "  Total:" + Str$(totalEntities) + " entities renumbered")
-    mApp.feAppMessage(FCM_HIGHLIGHT, "========================================")
-End Sub
-
-' =============================================
-' Dialog callback
-' =============================================
-Function RenumberDlgFunc(DlgItem$, Action%, SuppValue&) As Boolean
-    Select Case Action
-    Case 1  ' Initialization
-        Dim initStart As Long
-        Dim initStr As String
-        initStr = Trim$(DlgText$("startID"))
-        If IsNumeric(initStr) Then
-            initStart = CLng(initStr)
-        Else
-            initStart = 100000
-        End If
-        If initStart < 1 Then initStart = 100000
-        CalcStartIDs initStart
-        CheckConflicts
-        DlgText "tableLabel", BuildTableText()
-        DlgText "conflictLabel", mConflictText
-
-    Case 2  ' Control action
-        Select Case DlgItem$
-        Case "btnRecalc"
-            Dim recalcStart As Long
-            Dim recalcErr As String
-            recalcErr = ValidateStartID(Trim$(DlgText$("startID")), recalcStart)
-            If recalcErr <> "" Then
-                DlgText "conflictLabel", recalcErr
-                RenumberDlgFunc = True
-                Exit Function
-            End If
-            CalcStartIDs recalcStart
-            CheckConflicts
-            DlgText "tableLabel", BuildTableText()
-            DlgText "conflictLabel", mConflictText
-            RenumberDlgFunc = True
-
-        Case "OK"
-            Dim okStart As Long
-            Dim okErr As String
-            okErr = ValidateStartID(Trim$(DlgText$("startID")), okStart)
-            If okErr <> "" Then
-                DlgText "conflictLabel", okErr
-                RenumberDlgFunc = True
-                Exit Function
-            End If
-            CalcStartIDs okStart
-            RenumberDlgFunc = False
-        End Select
-    End Select
-End Function
-
-' =============================================
-' Validate start ID input string
-' Returns empty string if valid, error message otherwise
-' =============================================
-Function ValidateStartID(inputStr As String, ByRef startVal As Long) As String
-    If inputStr = "" Or Not IsNumeric(inputStr) Then
-        ValidateStartID = "ERROR: Start ID must be a number."
-        Exit Function
-    End If
-    On Error Resume Next
-    startVal = CLng(inputStr)
-    If Err.Number <> 0 Then
-        On Error GoTo 0
-        ValidateStartID = "ERROR: Start ID value is out of range."
-        Exit Function
-    End If
-    On Error GoTo 0
-    If startVal < 1 Then
-        ValidateStartID = "ERROR: Start ID must be >= 1."
-        Exit Function
-    End If
-    ValidateStartID = ""
-End Function
-
-' =============================================
-' Fill mStartIDs() sequentially from the given first start ID
-' =============================================
-Sub CalcStartIDs(firstStart As Long)
-    mStartIDs(0) = firstStart
-    Dim g As Long
-    For g = 1 To mNumGroups - 1
-        mStartIDs(g) = mStartIDs(g - 1) + mRangeSize(g - 1)
-    Next g
-End Sub
-
-' =============================================
-' Build proportional-font-friendly table text for dialog
-' =============================================
-Function BuildTableText() As String
-    Dim NL As String
-    NL = Chr$(13)
-    Dim txt As String
-    txt = ""
-
-    Dim g As Long
-    For g = 0 To mNumGroups - 1
-        If g > 0 Then txt = txt + NL
-        txt = txt + mGroupTitles(g) + " (max:" + Str$(mMaxCount(g)) + ")" + NL
-        txt = txt + "  CSys:" + Str$(mEntityCounts(g, 0)) + _
-            "  Matl:" + Str$(mEntityCounts(g, 1)) + _
-            "  Prop:" + Str$(mEntityCounts(g, 2)) + _
-            "  Elem:" + Str$(mEntityCounts(g, 3)) + _
-            "  Node:" + Str$(mEntityCounts(g, 4)) + NL
-        txt = txt + "  Range:" + Str$(mStartIDs(g)) + " -" + _
-            Str$(mStartIDs(g) + mRangeSize(g) - 1) + _
-            " (size:" + Str$(mRangeSize(g)) + ")"
-    Next g
-
-    BuildTableText = txt
-End Function
-
-' =============================================
-' Check for ID conflicts with entities outside the selected groups
-' =============================================
-Sub CheckConflicts()
-    Dim NL As String
-    NL = Chr$(13)
-    mConflictText = ""
-
-    Dim gp As femap.Group
-    Set gp = mApp.feGroup
-    Dim copySet As femap.Set
-    Set copySet = mApp.feSet
-    Dim allEntSet As femap.Set
-    Set allEntSet = mApp.feSet
-    Dim rangeSet As femap.Set
-    Set rangeSet = mApp.feSet
-    Dim checkSet As femap.Set
-    Set checkSet = mApp.feSet
-
-    Dim conflictCount As Long
-    conflictCount = 0
-    Dim rc As Long
-    Dim g As Long
-    Dim t As Long
-
-    For t = 0 To NUM_TYPES - 1
-        ' Get all entities of this type in the model
-        allEntSet.Clear()
-        allEntSet.AddAll(mAllFtTypes(t))
-        If allEntSet.Count = 0 Then GoTo NextConflictType
-
-        ' Remove entities that belong to any selected group
-        For g = 0 To mNumGroups - 1
-            rc = gp.Get(mGroupIDs(g))
-            If rc = FE_OK Then
-                Dim gpEntSet As femap.Set
-                Set gpEntSet = gp.List(mListTypes(t))
-                If Not gpEntSet Is Nothing Then
-                    copySet.Clear()
-                    copySet.AddSet(gpEntSet.ID)
-                    allEntSet.RemoveSet(copySet.ID)
-                End If
-            End If
-        Next g
-
-        ' allEntSet now contains only entities outside the selected groups
-        ' Check each target range for overlap
-        If allEntSet.Count > 0 Then
-            For g = 0 To mNumGroups - 1
-                rangeSet.Clear()
-                rangeSet.AddRange(mStartIDs(g), 1, mStartIDs(g) + mRangeSize(g) - 1)
-                checkSet.Clear()
-                checkSet.AddSet(allEntSet.ID)
-                checkSet.RemoveNotCommon(rangeSet.ID)
-                If checkSet.Count > 0 Then
-                    If conflictCount > 0 Then mConflictText = mConflictText + NL
-                    mConflictText = mConflictText + "WARNING:" + Str$(checkSet.Count) + _
-                        " " + mTypeLabels(t) + " in range" + _
-                        Str$(mStartIDs(g)) + " -" + Str$(mStartIDs(g) + mRangeSize(g) - 1)
-                    conflictCount = conflictCount + 1
-                End If
-            Next g
-        End If
-NextConflictType:
-    Next t
-
-    If conflictCount = 0 Then
-        mConflictText = "No conflicts with existing IDs."
-    End If
+    App.feAppMessage(FCM_NORMAL, "")
+    App.feAppMessage(FCM_HIGHLIGHT, "  Total:" + Str$(totalEntities) + " entities renumbered")
+    App.feAppMessage(FCM_HIGHLIGHT, "========================================")
 End Sub
