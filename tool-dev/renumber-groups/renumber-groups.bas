@@ -154,13 +154,20 @@ NextType:
     ReDim rangeSize(numGroups - 1)
     ReDim startIDs(numGroups - 1)
 
-    ' Range size per group: maxCount * 1.5 rounded up to nearest 1000, min 1000
+    ' Range size per group: large rounds to nearest 1000, small to nearest 100
     For g = 0 To numGroups - 1
-        If maxCount(g) = 0 Then
-            rangeSize(g) = 1000
-        Else
+        If maxCount(g) > 100 Then
+            ' Large: round up to nearest 1000, min 1000
             rangeSize(g) = Int((maxCount(g) * 1.5) / 1000 + 0.999) * 1000
             If rangeSize(g) < 1000 Then rangeSize(g) = 1000
+        Else
+            ' Small: round up to nearest 100, min 100
+            If maxCount(g) = 0 Then
+                rangeSize(g) = 100
+            Else
+                rangeSize(g) = Int((maxCount(g) * 1.5) / 100 + 0.999) * 100
+                If rangeSize(g) < 100 Then rangeSize(g) = 100
+            End If
         End If
     Next g
 
@@ -282,9 +289,12 @@ NextType:
     ' Auto-fit columns
     ws.Columns("A:J").AutoFit
 
-    ' -- Sheet protection: lock all except H and J --
-    ws.Columns("H").Locked = False
-    ws.Columns("J").Locked = False
+    ' -- Sheet protection: lock all except data cells in H and J --
+    Dim er As Long
+    For er = 0 To numGroups - 1
+        ws.Cells(excelRows(er), 8).Locked = False   ' Start ID
+        ws.Cells(excelRows(er), 10).Locked = False  ' Range Size
+    Next er
     ws.Protect Password:=""
 
     ' -- Wait for user --
