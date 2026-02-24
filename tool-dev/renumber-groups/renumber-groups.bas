@@ -122,6 +122,31 @@ NextType:
     Next g
 
     ' =============================================
+    ' Section 2.5: Partition Groups into Large/Small
+    ' =============================================
+    Dim sortOrder() As Long
+    ReDim sortOrder(numGroups - 1)
+    Dim numLarge As Long, numSmall As Long
+    numLarge = 0
+    numSmall = 0
+
+    ' First pass: collect large groups (max > 100)
+    For g = 0 To numGroups - 1
+        If maxCount(g) > 100 Then
+            sortOrder(numLarge) = g
+            numLarge = numLarge + 1
+        End If
+    Next g
+
+    ' Second pass: collect small groups (max <= 100)
+    For g = 0 To numGroups - 1
+        If maxCount(g) <= 100 Then
+            sortOrder(numLarge + numSmall) = g
+            numSmall = numSmall + 1
+        End If
+    Next g
+
+    ' =============================================
     ' Section 3: Calculate Range Sizes
     ' =============================================
     Dim rangeSize() As Long
@@ -175,41 +200,85 @@ NextType:
     ' Bold headers
     ws.Range("A1:J1").Font.Bold = True
 
-    ' -- Data rows --
-    For g = 0 To numGroups - 1
-        Dim r As Long
-        r = g + 2  ' Row index (1-based, row 1 = headers)
+    ' -- Data rows (two sections: large then small) --
+    Dim curRow As Long
+    curRow = 1  ' Start after headers
+    Dim excelRows() As Long
+    ReDim excelRows(numGroups - 1)
+    Dim i As Long
+    Dim gi As Long
 
-        ws.Cells(r, 1).Value = groupTitles(g)
-        ws.Cells(r, 2).Value = entityCounts(g, 0)  ' CSys
-        ws.Cells(r, 3).Value = entityCounts(g, 1)  ' Matl
-        ws.Cells(r, 4).Value = entityCounts(g, 2)  ' Prop
-        ws.Cells(r, 5).Value = entityCounts(g, 3)  ' Elem
-        ws.Cells(r, 6).Value = entityCounts(g, 4)  ' Node
-        ws.Cells(r, 7).Value = maxCount(g)
+    ' -- Large groups section --
+    If numLarge > 0 Then
+        curRow = curRow + 1
+        ws.Range("A" & CStr(curRow) & ":J" & CStr(curRow)).Merge
+        ws.Cells(curRow, 1).Value = "Large Groups (max > 100)"
+        ws.Cells(curRow, 1).Font.Bold = True
+        ws.Cells(curRow, 1).Interior.Color = RGB(217, 217, 217)
 
-        ' Start ID: first row = 100000, subsequent rows = formula chaining
-        If g = 0 Then
-            ws.Cells(r, 8).Value = 100000
-        Else
-            ws.Cells(r, 8).Formula = "=H" & CStr(r - 1) & "+J" & CStr(r - 1)
-        End If
+        For i = 0 To numLarge - 1
+            curRow = curRow + 1
+            excelRows(i) = curRow
+            gi = sortOrder(i)
 
-        ' End ID: formula = Start ID + Range Size - 1
-        ws.Cells(r, 9).Formula = "=H" & CStr(r) & "+J" & CStr(r) & "-1"
+            ws.Cells(curRow, 1).Value = groupTitles(gi)
+            ws.Cells(curRow, 2).Value = entityCounts(gi, 0)
+            ws.Cells(curRow, 3).Value = entityCounts(gi, 1)
+            ws.Cells(curRow, 4).Value = entityCounts(gi, 2)
+            ws.Cells(curRow, 5).Value = entityCounts(gi, 3)
+            ws.Cells(curRow, 6).Value = entityCounts(gi, 4)
+            ws.Cells(curRow, 7).Value = maxCount(gi)
 
-        ' Range Size: pre-filled with calculated value
-        ws.Cells(r, 10).Value = rangeSize(g)
-    Next g
+            If i = 0 Then
+                ws.Cells(curRow, 8).Value = 100000
+            Else
+                ws.Cells(curRow, 8).Formula = "=H" & CStr(curRow - 1) & "+J" & CStr(curRow - 1)
+            End If
+
+            ws.Cells(curRow, 9).Formula = "=H" & CStr(curRow) & "+J" & CStr(curRow) & "-1"
+            ws.Cells(curRow, 10).Value = rangeSize(gi)
+            ws.Cells(curRow, 8).Interior.Color = RGB(255, 255, 153)
+            ws.Cells(curRow, 10).Interior.Color = RGB(255, 255, 204)
+        Next i
+    End If
+
+    ' -- Small groups section --
+    If numSmall > 0 Then
+        If numLarge > 0 Then curRow = curRow + 1  ' Blank separator row
+
+        curRow = curRow + 1
+        ws.Range("A" & CStr(curRow) & ":J" & CStr(curRow)).Merge
+        ws.Cells(curRow, 1).Value = "Small Groups (max <= 100)"
+        ws.Cells(curRow, 1).Font.Bold = True
+        ws.Cells(curRow, 1).Interior.Color = RGB(217, 217, 217)
+
+        For i = numLarge To numGroups - 1
+            curRow = curRow + 1
+            excelRows(i) = curRow
+            gi = sortOrder(i)
+
+            ws.Cells(curRow, 1).Value = groupTitles(gi)
+            ws.Cells(curRow, 2).Value = entityCounts(gi, 0)
+            ws.Cells(curRow, 3).Value = entityCounts(gi, 1)
+            ws.Cells(curRow, 4).Value = entityCounts(gi, 2)
+            ws.Cells(curRow, 5).Value = entityCounts(gi, 3)
+            ws.Cells(curRow, 6).Value = entityCounts(gi, 4)
+            ws.Cells(curRow, 7).Value = maxCount(gi)
+
+            If i = numLarge Then
+                ws.Cells(curRow, 8).Value = 500000
+            Else
+                ws.Cells(curRow, 8).Formula = "=H" & CStr(curRow - 1) & "+J" & CStr(curRow - 1)
+            End If
+
+            ws.Cells(curRow, 9).Formula = "=H" & CStr(curRow) & "+J" & CStr(curRow) & "-1"
+            ws.Cells(curRow, 10).Value = rangeSize(gi)
+            ws.Cells(curRow, 8).Interior.Color = RGB(255, 255, 153)
+            ws.Cells(curRow, 10).Interior.Color = RGB(255, 255, 204)
+        Next i
+    End If
 
     ' -- Formatting --
-    ' Yellow background for editable Start ID column (H)
-    Dim lastRow As Long
-    lastRow = numGroups + 1
-    ws.Range("H2:H" & CStr(lastRow)).Interior.Color = RGB(255, 255, 153)
-    ' Light yellow for editable Range Size column (J)
-    ws.Range("J2:J" & CStr(lastRow)).Interior.Color = RGB(255, 255, 204)
-
     ' Auto-fit columns
     ws.Columns("A:J").AutoFit
 
@@ -258,11 +327,12 @@ NextType:
         Exit Sub
     End If
 
-    ' Read Start IDs and Range Sizes from Excel
-    For g = 0 To numGroups - 1
-        startIDs(g) = CLng(ws.Cells(g + 2, 8).Value)   ' Column H
-        rangeSize(g) = CLng(ws.Cells(g + 2, 10).Value)  ' Column J
-    Next g
+    ' Read Start IDs and Range Sizes from Excel (map sorted rows back to original indices)
+    For i = 0 To numGroups - 1
+        gi = sortOrder(i)
+        startIDs(gi) = CLng(ws.Cells(excelRows(i), 8).Value)   ' Column H
+        rangeSize(gi) = CLng(ws.Cells(excelRows(i), 10).Value)  ' Column J
+    Next i
 
     ' Close Excel
     On Error Resume Next
