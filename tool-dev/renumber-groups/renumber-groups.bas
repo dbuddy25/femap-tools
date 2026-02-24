@@ -229,9 +229,10 @@ NextType:
     ws.Cells(1, 10).Value = "Start ID"
     ws.Cells(1, 11).Value = "End ID"
     ws.Cells(1, 12).Value = "Range Size"
+    ws.Cells(1, 13).Value = "Headroom"
 
     ' Bold headers
-    ws.Range("A1:L1").Font.Bold = True
+    ws.Range("A1:M1").Font.Bold = True
 
     ' -- Data rows (two sections: small then large) --
     Dim curRow As Long
@@ -244,7 +245,7 @@ NextType:
     ' -- Small groups section --
     If numSmall > 0 Then
         curRow = curRow + 1
-        ws.Range("A" & CStr(curRow) & ":L" & CStr(curRow)).Merge
+        ws.Range("A" & CStr(curRow) & ":M" & CStr(curRow)).Merge
         ws.Cells(curRow, 1).Value = "Small Groups (max <= 100)"
         ws.Cells(curRow, 1).Font.Bold = True
         ws.Cells(curRow, 1).Interior.Color = RGB(217, 217, 217)
@@ -282,7 +283,7 @@ NextType:
         If numSmall > 0 Then curRow = curRow + 1  ' Blank separator row
 
         curRow = curRow + 1
-        ws.Range("A" & CStr(curRow) & ":L" & CStr(curRow)).Merge
+        ws.Range("A" & CStr(curRow) & ":M" & CStr(curRow)).Merge
         ws.Cells(curRow, 1).Value = "Large Groups (max > 100)"
         ws.Cells(curRow, 1).Font.Bold = True
         ws.Cells(curRow, 1).Interior.Color = RGB(217, 217, 217)
@@ -315,9 +316,14 @@ NextType:
         Next i
     End If
 
+    ' -- Headroom formulas (second pass, needs all excelRows populated) --
+    For i = 0 To numGroups - 2
+        ws.Cells(excelRows(i), 13).Formula = "=J" & CStr(excelRows(i + 1)) & "-K" & CStr(excelRows(i))
+    Next i
+
     ' -- Formatting --
     ' Auto-fit columns
-    ws.Columns("A:L").AutoFit
+    ws.Columns("A:M").AutoFit
 
     ' -- Sheet protection: lock all except data cells in J and L --
     Dim er As Long
@@ -436,6 +442,20 @@ NextType:
         End If
 NextConflictType:
     Next t
+
+    ' Check for overlapping ranges between selected groups
+    Dim g2 As Long
+    For g = 0 To numGroups - 2
+        For g2 = g + 1 To numGroups - 1
+            If startIDs(g) < startIDs(g2) + rangeSize(g2) And _
+               startIDs(g2) < startIDs(g) + rangeSize(g) Then
+                If conflictCount > 0 Then conflictText = conflictText + Chr$(10)
+                conflictText = conflictText + "WARNING: """ + groupTitles(g) + """ and """ + _
+                    groupTitles(g2) + """ ranges overlap"
+                conflictCount = conflictCount + 1
+            End If
+        Next g2
+    Next g
 
     ' -- Confirmation MsgBox --
     Dim totalEntities As Long
