@@ -316,9 +316,9 @@ NextType:
         Next i
     End If
 
-    ' -- Headroom formulas (second pass, needs all excelRows populated) --
-    For i = 0 To numGroups - 2
-        ws.Cells(excelRows(i), 13).Formula = "=J" & CStr(excelRows(i + 1)) & "-K" & CStr(excelRows(i))
+    ' -- Headroom formulas: unused IDs within allotted range (Range Size - Max Count) --
+    For i = 0 To numGroups - 1
+        ws.Cells(excelRows(i), 13).Formula = "=L" & CStr(excelRows(i)) & "-G" & CStr(excelRows(i))
     Next i
 
     ' -- Formatting --
