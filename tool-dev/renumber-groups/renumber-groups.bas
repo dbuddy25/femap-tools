@@ -88,6 +88,11 @@ Sub Main
     ReDim entityCounts(numGroups - 1, NUM_TYPES - 1)
     ReDim maxCount(numGroups - 1)
 
+    Dim curMinID() As Long
+    Dim curMaxID() As Long
+    ReDim curMinID(numGroups - 1)
+    ReDim curMaxID(numGroups - 1)
+
     Dim copySet As femap.Set
     Set copySet = App.feSet
 
@@ -96,6 +101,8 @@ Sub Main
 
     For g = 0 To numGroups - 1
         maxCount(g) = 0
+        curMinID(g) = 2147483647
+        curMaxID(g) = 0
         For t = 0 To NUM_TYPES - 1
             rc = gp.Get(groupIDs(g))
             If rc <> FE_OK Then
@@ -112,6 +119,20 @@ Sub Main
                 copySet.Clear()
                 copySet.AddSet(entSet.ID)
                 entityCounts(g, t) = copySet.Count
+
+                ' Track min/max IDs across all entity types
+                If copySet.Count > 0 Then
+                    Dim firstID As Long, lastID As Long, curID As Long
+                    firstID = copySet.First()
+                    If firstID < curMinID(g) Then curMinID(g) = firstID
+                    lastID = firstID
+                    curID = copySet.Next()
+                    Do While curID > 0
+                        lastID = curID
+                        curID = copySet.Next()
+                    Loop
+                    If lastID > curMaxID(g) Then curMaxID(g) = lastID
+                End If
             End If
 
             If entityCounts(g, t) > maxCount(g) Then
@@ -119,6 +140,9 @@ Sub Main
             End If
 NextType:
         Next t
+
+        ' Clean up sentinel for empty groups
+        If curMaxID(g) = 0 Then curMinID(g) = 0
     Next g
 
     ' =============================================
@@ -130,19 +154,19 @@ NextType:
     numLarge = 0
     numSmall = 0
 
-    ' First pass: collect large groups (max > 100)
+    ' First pass: collect small groups (max <= 100)
     For g = 0 To numGroups - 1
-        If maxCount(g) > 100 Then
-            sortOrder(numLarge) = g
-            numLarge = numLarge + 1
+        If maxCount(g) <= 100 Then
+            sortOrder(numSmall) = g
+            numSmall = numSmall + 1
         End If
     Next g
 
-    ' Second pass: collect small groups (max <= 100)
+    ' Second pass: collect large groups (max > 100)
     For g = 0 To numGroups - 1
-        If maxCount(g) <= 100 Then
-            sortOrder(numLarge + numSmall) = g
-            numSmall = numSmall + 1
+        If maxCount(g) > 100 Then
+            sortOrder(numSmall + numLarge) = g
+            numLarge = numLarge + 1
         End If
     Next g
 
@@ -200,14 +224,16 @@ NextType:
     ws.Cells(1, 5).Value = "Elem"
     ws.Cells(1, 6).Value = "Node"
     ws.Cells(1, 7).Value = "Max"
-    ws.Cells(1, 8).Value = "Start ID"
-    ws.Cells(1, 9).Value = "End ID"
-    ws.Cells(1, 10).Value = "Range Size"
+    ws.Cells(1, 8).Value = "Cur Min"
+    ws.Cells(1, 9).Value = "Cur Max"
+    ws.Cells(1, 10).Value = "Start ID"
+    ws.Cells(1, 11).Value = "End ID"
+    ws.Cells(1, 12).Value = "Range Size"
 
     ' Bold headers
-    ws.Range("A1:J1").Font.Bold = True
+    ws.Range("A1:L1").Font.Bold = True
 
-    ' -- Data rows (two sections: large then small) --
+    ' -- Data rows (two sections: small then large) --
     Dim curRow As Long
     curRow = 1  ' Start after headers
     Dim excelRows() As Long
@@ -215,51 +241,15 @@ NextType:
     Dim i As Long
     Dim gi As Long
 
-    ' -- Large groups section --
-    If numLarge > 0 Then
-        curRow = curRow + 1
-        ws.Range("A" & CStr(curRow) & ":J" & CStr(curRow)).Merge
-        ws.Cells(curRow, 1).Value = "Large Groups (max > 100)"
-        ws.Cells(curRow, 1).Font.Bold = True
-        ws.Cells(curRow, 1).Interior.Color = RGB(217, 217, 217)
-
-        For i = 0 To numLarge - 1
-            curRow = curRow + 1
-            excelRows(i) = curRow
-            gi = sortOrder(i)
-
-            ws.Cells(curRow, 1).Value = groupTitles(gi)
-            ws.Cells(curRow, 2).Value = entityCounts(gi, 0)
-            ws.Cells(curRow, 3).Value = entityCounts(gi, 1)
-            ws.Cells(curRow, 4).Value = entityCounts(gi, 2)
-            ws.Cells(curRow, 5).Value = entityCounts(gi, 3)
-            ws.Cells(curRow, 6).Value = entityCounts(gi, 4)
-            ws.Cells(curRow, 7).Value = maxCount(gi)
-
-            If i = 0 Then
-                ws.Cells(curRow, 8).Value = 100000
-            Else
-                ws.Cells(curRow, 8).Formula = "=H" & CStr(curRow - 1) & "+J" & CStr(curRow - 1)
-            End If
-
-            ws.Cells(curRow, 9).Formula = "=H" & CStr(curRow) & "+J" & CStr(curRow) & "-1"
-            ws.Cells(curRow, 10).Value = rangeSize(gi)
-            ws.Cells(curRow, 8).Interior.Color = RGB(255, 255, 153)
-            ws.Cells(curRow, 10).Interior.Color = RGB(255, 255, 204)
-        Next i
-    End If
-
     ' -- Small groups section --
     If numSmall > 0 Then
-        If numLarge > 0 Then curRow = curRow + 1  ' Blank separator row
-
         curRow = curRow + 1
-        ws.Range("A" & CStr(curRow) & ":J" & CStr(curRow)).Merge
+        ws.Range("A" & CStr(curRow) & ":L" & CStr(curRow)).Merge
         ws.Cells(curRow, 1).Value = "Small Groups (max <= 100)"
         ws.Cells(curRow, 1).Font.Bold = True
         ws.Cells(curRow, 1).Interior.Color = RGB(217, 217, 217)
 
-        For i = numLarge To numGroups - 1
+        For i = 0 To numSmall - 1
             curRow = curRow + 1
             excelRows(i) = curRow
             gi = sortOrder(i)
@@ -271,29 +261,69 @@ NextType:
             ws.Cells(curRow, 5).Value = entityCounts(gi, 3)
             ws.Cells(curRow, 6).Value = entityCounts(gi, 4)
             ws.Cells(curRow, 7).Value = maxCount(gi)
+            ws.Cells(curRow, 8).Value = curMinID(gi)
+            ws.Cells(curRow, 9).Value = curMaxID(gi)
 
-            If i = numLarge Then
-                ws.Cells(curRow, 8).Value = 500000
+            If i = 0 Then
+                ws.Cells(curRow, 10).Value = 1
             Else
-                ws.Cells(curRow, 8).Formula = "=H" & CStr(curRow - 1) & "+J" & CStr(curRow - 1)
+                ws.Cells(curRow, 10).Formula = "=J" & CStr(curRow - 1) & "+L" & CStr(curRow - 1)
             End If
 
-            ws.Cells(curRow, 9).Formula = "=H" & CStr(curRow) & "+J" & CStr(curRow) & "-1"
-            ws.Cells(curRow, 10).Value = rangeSize(gi)
-            ws.Cells(curRow, 8).Interior.Color = RGB(255, 255, 153)
-            ws.Cells(curRow, 10).Interior.Color = RGB(255, 255, 204)
+            ws.Cells(curRow, 11).Formula = "=J" & CStr(curRow) & "+L" & CStr(curRow) & "-1"
+            ws.Cells(curRow, 12).Value = rangeSize(gi)
+            ws.Cells(curRow, 10).Interior.Color = RGB(255, 255, 153)
+            ws.Cells(curRow, 12).Interior.Color = RGB(255, 255, 204)
+        Next i
+    End If
+
+    ' -- Large groups section --
+    If numLarge > 0 Then
+        If numSmall > 0 Then curRow = curRow + 1  ' Blank separator row
+
+        curRow = curRow + 1
+        ws.Range("A" & CStr(curRow) & ":L" & CStr(curRow)).Merge
+        ws.Cells(curRow, 1).Value = "Large Groups (max > 100)"
+        ws.Cells(curRow, 1).Font.Bold = True
+        ws.Cells(curRow, 1).Interior.Color = RGB(217, 217, 217)
+
+        For i = numSmall To numGroups - 1
+            curRow = curRow + 1
+            excelRows(i) = curRow
+            gi = sortOrder(i)
+
+            ws.Cells(curRow, 1).Value = groupTitles(gi)
+            ws.Cells(curRow, 2).Value = entityCounts(gi, 0)
+            ws.Cells(curRow, 3).Value = entityCounts(gi, 1)
+            ws.Cells(curRow, 4).Value = entityCounts(gi, 2)
+            ws.Cells(curRow, 5).Value = entityCounts(gi, 3)
+            ws.Cells(curRow, 6).Value = entityCounts(gi, 4)
+            ws.Cells(curRow, 7).Value = maxCount(gi)
+            ws.Cells(curRow, 8).Value = curMinID(gi)
+            ws.Cells(curRow, 9).Value = curMaxID(gi)
+
+            If i = numSmall Then
+                ws.Cells(curRow, 10).Value = 100001
+            Else
+                ws.Cells(curRow, 10).Formula = "=J" & CStr(curRow - 1) & "+L" & CStr(curRow - 1)
+            End If
+
+            ws.Cells(curRow, 11).Formula = "=J" & CStr(curRow) & "+L" & CStr(curRow) & "-1"
+            ws.Cells(curRow, 12).Value = rangeSize(gi)
+            ws.Cells(curRow, 10).Interior.Color = RGB(255, 255, 153)
+            ws.Cells(curRow, 12).Interior.Color = RGB(255, 255, 204)
         Next i
     End If
 
     ' -- Formatting --
     ' Auto-fit columns
-    ws.Columns("A:J").AutoFit
+    ws.Columns("A:L").AutoFit
 
-    ' -- Sheet protection: lock all except data cells in H and J --
+    ' -- Sheet protection: lock all except data cells in J and L --
     Dim er As Long
     For er = 0 To numGroups - 1
-        ws.Cells(excelRows(er), 8).Locked = False   ' Start ID
-        ws.Cells(excelRows(er), 10).Locked = False  ' Range Size
+        ws.Cells(excelRows(er), 10).Locked = False  ' Start ID
+        ws.Cells(excelRows(er), 12).Locked = False  ' Range Size
     Next er
     ws.Protect Password:=""
 
@@ -340,8 +370,8 @@ NextType:
     ' Read Start IDs and Range Sizes from Excel (map sorted rows back to original indices)
     For i = 0 To numGroups - 1
         gi = sortOrder(i)
-        startIDs(gi) = CLng(ws.Cells(excelRows(i), 8).Value)   ' Column H
-        rangeSize(gi) = CLng(ws.Cells(excelRows(i), 10).Value)  ' Column J
+        startIDs(gi) = CLng(ws.Cells(excelRows(i), 10).Value)  ' Column J
+        rangeSize(gi) = CLng(ws.Cells(excelRows(i), 12).Value)  ' Column L
     Next i
 
     ' Close Excel
