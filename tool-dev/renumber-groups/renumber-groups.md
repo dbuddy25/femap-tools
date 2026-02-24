@@ -2,14 +2,15 @@
 
 Renumbers all entities (nodes, elements, coordinate systems, materials, properties) in selected groups into non-overlapping ID ranges with growth buffer.
 
-**Last updated:** 2026-02-23
+**Last updated:** 2026-02-24
 
 ## Usage
 
 - Run in Femap's API Programming window
 - Select 1 or more groups to renumber
-- Enter the starting ID for the first group (default: 100000)
-- Review the summary showing assigned ranges and any ID conflicts, then confirm
+- A dialog shows per-group entity counts, assigned ranges, and conflict warnings
+- Change the start ID and click **Recalculate** to see updated ranges and conflicts
+- Click **OK** to proceed or **Cancel** to abort
 - Entities are renumbered in dependency order: CSys, Materials, Properties, Elements, Nodes
 
 ## How Ranges Work
