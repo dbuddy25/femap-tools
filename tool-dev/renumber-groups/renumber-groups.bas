@@ -672,40 +672,28 @@ NextPlace:
     ' =============================================
     ' Section 6: Report Results
     ' =============================================
-    Dim reportLabels(4) As String
-    reportLabels(0) = "CSys"
-    reportLabels(1) = "Materials"
-    reportLabels(2) = "Properties"
-    reportLabels(3) = "Elements"
-    reportLabels(4) = "Nodes"
-
-    App.feAppMessage(FCM_HIGHLIGHT, "========================================")
-    App.feAppMessage(FCM_HIGHLIGHT, "  Renumber Groups - Results")
-    App.feAppMessage(FCM_HIGHLIGHT, "========================================")
+    ' First pass: collect post-renumber data into arrays
+    Dim rptGroup() As Long, rptType() As Long, rptCount() As Long
+    Dim rptMin() As Long, rptMax() As Long
+    Dim rptRows As Long
+    rptRows = 0
+    Dim maxRptRows As Long
+    maxRptRows = numGroups * NUM_TYPES
+    ReDim rptGroup(maxRptRows - 1)
+    ReDim rptType(maxRptRows - 1)
+    ReDim rptCount(maxRptRows - 1)
+    ReDim rptMin(maxRptRows - 1)
+    ReDim rptMax(maxRptRows - 1)
 
     For g = 0 To numGroups - 1
-        App.feAppMessage(FCM_HIGHLIGHT, "  """ + groupTitles(g) + """ (start ID:" + Str$(startIDs(g)) + ")")
-
-        Dim grpRenumTotal As Long
-        grpRenumTotal = 0
         For t = 0 To NUM_TYPES - 1
-            grpRenumTotal = grpRenumTotal + renumCounts(g, t)
             If renumCounts(g, t) > 0 Then
-                Dim labelPad As String
-                labelPad = reportLabels(t) + ":"
-                Do While Len(labelPad) < 16
-                    labelPad = labelPad + " "
-                Loop
+                rptGroup(rptRows) = g
+                rptType(rptRows) = t
+                rptCount(rptRows) = renumCounts(g, t)
+                rptMin(rptRows) = 0
+                rptMax(rptRows) = 0
 
-                ' Re-read group to get actual post-renumber ID range
-                Dim countStr As String
-                countStr = Str$(renumCounts(g, t)) + " renumbered"
-                Do While Len(countStr) < 16
-                    countStr = countStr + " "
-                Loop
-
-                Dim rangeStr As String
-                rangeStr = ""
                 rc = gp.Get(groupIDs(g))
                 If rc = FE_OK Then
                     Dim postSet As femap.Set
@@ -722,19 +710,65 @@ NextPlace:
                                 maxID = walkID
                                 walkID = copySet.Next()
                             Loop
-                            rangeStr = "  [" + Str$(minID) + " -" + Str$(maxID) + "]"
+                            rptMin(rptRows) = minID
+                            rptMax(rptRows) = maxID
                         End If
                     End If
                 End If
 
-                App.feAppMessage(FCM_NORMAL, "    " + labelPad + countStr + rangeStr)
+                rptRows = rptRows + 1
             End If
         Next t
-
-        If grpRenumTotal = 0 Then
-            App.feAppMessage(FCM_NORMAL, "    (no entities)")
-        End If
     Next g
+
+    ' Calculate column widths (min = header label width)
+    Dim cGrp As Long, cTyp As Long, cCnt As Long, cMn As Long, cMx As Long
+    cGrp = 5   ' "Group"
+    cTyp = 4   ' "Type"
+    cCnt = 5   ' "Count"
+    cMn = 6    ' "Min ID"
+    cMx = 6    ' "Max ID"
+
+    Dim ri As Long
+    For ri = 0 To rptRows - 1
+        If Len(groupTitles(rptGroup(ri))) > cGrp Then cGrp = Len(groupTitles(rptGroup(ri)))
+        If Len(typeLabels(rptType(ri))) > cTyp Then cTyp = Len(typeLabels(rptType(ri)))
+        If Len(CStr(rptCount(ri))) > cCnt Then cCnt = Len(CStr(rptCount(ri)))
+        If Len(CStr(rptMin(ri))) > cMn Then cMn = Len(CStr(rptMin(ri)))
+        If Len(CStr(rptMax(ri))) > cMx Then cMx = Len(CStr(rptMax(ri)))
+    Next ri
+
+    ' Output table
+    App.feAppMessage(FCM_HIGHLIGHT, "========================================")
+    App.feAppMessage(FCM_HIGHLIGHT, "  Renumber Groups - Results")
+    App.feAppMessage(FCM_HIGHLIGHT, "========================================")
+
+    Dim rHdr As String
+    rHdr = "  " + Left$("Group" + Space$(cGrp), cGrp) + "  " + _
+           Left$("Type" + Space$(cTyp), cTyp) + "  " + _
+           Right$(Space$(cCnt) + "Count", cCnt) + "  " + _
+           Right$(Space$(cMn) + "Min ID", cMn) + "  " + _
+           Right$(Space$(cMx) + "Max ID", cMx)
+    App.feAppMessage(FCM_HIGHLIGHT, rHdr)
+
+    Dim rSep As String
+    rSep = "  " + String$(cGrp, "-") + "  " + String$(cTyp, "-") + "  " + _
+           String$(cCnt, "-") + "  " + String$(cMn, "-") + "  " + String$(cMx, "-")
+    App.feAppMessage(FCM_HIGHLIGHT, rSep)
+
+    For ri = 0 To rptRows - 1
+        Dim rRow As String
+        rRow = "  " + Left$(groupTitles(rptGroup(ri)) + Space$(cGrp), cGrp) + "  " + _
+               Left$(typeLabels(rptType(ri)) + Space$(cTyp), cTyp) + "  " + _
+               Right$(Space$(cCnt) + CStr(rptCount(ri)), cCnt) + "  " + _
+               Right$(Space$(cMn) + CStr(rptMin(ri)), cMn) + "  " + _
+               Right$(Space$(cMx) + CStr(rptMax(ri)), cMx)
+        App.feAppMessage(FCM_NORMAL, rRow)
+    Next ri
+
+    If rptRows = 0 Then
+        App.feAppMessage(FCM_NORMAL, "  (no entities renumbered)")
+    End If
 
     App.feAppMessage(FCM_NORMAL, "")
     App.feAppMessage(FCM_HIGHLIGHT, "  Total:" + Str$(totalEntities) + " entities renumbered")
