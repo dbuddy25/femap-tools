@@ -726,8 +726,8 @@ NextPlace:
     cGrp = 5   ' "Group"
     cTyp = 4   ' "Type"
     cCnt = 5   ' "Count"
-    cMn = 6    ' "Min ID"
-    cMx = 6    ' "Max ID"
+    cMn = 9    ' 9-digit IDs
+    cMx = 9    ' 9-digit IDs
 
     Dim ri As Long
     For ri = 0 To rptRows - 1
