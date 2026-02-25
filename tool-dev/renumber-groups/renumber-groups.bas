@@ -153,8 +153,15 @@ NextType:
         Set overlapSet = App.feSet
         Dim setA As femap.Set
         Set setA = App.feSet
-        Dim overlapText As String
-        overlapText = ""
+
+        ' Storage for overlap data
+        Dim maxOL As Long
+        maxOL = numGroups * (numGroups - 1) / 2 * NUM_TYPES
+        Dim olG1() As Long, olG2() As Long, olCnt() As Long, olType() As Long
+        ReDim olG1(maxOL - 1)
+        ReDim olG2(maxOL - 1)
+        ReDim olCnt(maxOL - 1)
+        ReDim olType(maxOL - 1)
         Dim overlapCount As Long
         overlapCount = 0
 
@@ -186,9 +193,10 @@ NextType:
                     ' Intersect to find shared entities
                     setA.RemoveNotCommon(overlapSet.ID)
                     If setA.Count > 0 Then
-                        overlapText = overlapText + "  """ + groupTitles(g1) + """ and """ + _
-                            groupTitles(g2) + """ share" + Str$(setA.Count) + " " + _
-                            typeLabels(t) + Chr$(10)
+                        olG1(overlapCount) = g1
+                        olG2(overlapCount) = g2
+                        olCnt(overlapCount) = setA.Count
+                        olType(overlapCount) = t
                         overlapCount = overlapCount + 1
                     End If
 NextPair:
@@ -197,19 +205,48 @@ NextPair:
         Next t
 
         If overlapCount > 0 Then
+            ' Calculate column widths (min = header label width)
+            Dim colW1 As Long, colW2 As Long, colW3 As Long
+            colW1 = 7  ' "Group A"
+            colW2 = 7  ' "Group B"
+            colW3 = 5  ' "Count"
+
+            Dim oi As Long
+            For oi = 0 To overlapCount - 1
+                If Len(groupTitles(olG1(oi))) > colW1 Then colW1 = Len(groupTitles(olG1(oi)))
+                If Len(groupTitles(olG2(oi))) > colW2 Then colW2 = Len(groupTitles(olG2(oi)))
+                If Len(CStr(olCnt(oi))) > colW3 Then colW3 = Len(CStr(olCnt(oi)))
+            Next oi
+
+            ' Message pane table
             App.feAppMessage(FCM_ERROR, "========================================")
             App.feAppMessage(FCM_ERROR, "  Renumber Groups - Overlap Detected")
             App.feAppMessage(FCM_ERROR, "========================================")
 
-            ' Print each overlap line to message pane
-            Dim olLines() As String
-            olLines = Split(overlapText, Chr$(10))
-            Dim olIdx As Long
-            For olIdx = 0 To UBound(olLines)
-                If Len(olLines(olIdx)) > 0 Then
-                    App.feAppMessage(FCM_ERROR, olLines(olIdx))
-                End If
-            Next olIdx
+            Dim hdr As String
+            hdr = "  " + Left$("Group A" + Space$(colW1), colW1) + "  " + _
+                  Left$("Group B" + Space$(colW2), colW2) + "  " + _
+                  Right$(Space$(colW3) + "Count", colW3) + "  Type"
+            App.feAppMessage(FCM_ERROR, hdr)
+
+            Dim sep As String
+            sep = "  " + String$(colW1, "-") + "  " + String$(colW2, "-") + _
+                  "  " + String$(colW3, "-") + "  ----"
+            App.feAppMessage(FCM_ERROR, sep)
+
+            Dim overlapText As String
+            overlapText = ""
+            For oi = 0 To overlapCount - 1
+                Dim rowStr As String
+                rowStr = "  " + Left$(groupTitles(olG1(oi)) + Space$(colW1), colW1) + "  " + _
+                         Left$(groupTitles(olG2(oi)) + Space$(colW2), colW2) + "  " + _
+                         Right$(Space$(colW3) + CStr(olCnt(oi)), colW3) + "  " + _
+                         typeLabels(olType(oi))
+                App.feAppMessage(FCM_ERROR, rowStr)
+                overlapText = overlapText + groupTitles(olG1(oi)) + " & " + _
+                    groupTitles(olG2(oi)) + ": " + CStr(olCnt(oi)) + " " + _
+                    typeLabels(olType(oi)) + Chr$(10)
+            Next oi
 
             App.feAppMessage(FCM_ERROR, "========================================")
 
