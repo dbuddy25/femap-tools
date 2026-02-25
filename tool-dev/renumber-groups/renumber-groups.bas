@@ -146,6 +146,81 @@ NextType:
     Next g
 
     ' =============================================
+    ' Section 2a: Detect Overlapping Groups
+    ' =============================================
+    If numGroups > 1 Then
+        Dim overlapSet As femap.Set
+        Set overlapSet = App.feSet
+        Dim setA As femap.Set
+        Set setA = App.feSet
+        Dim overlapText As String
+        overlapText = ""
+        Dim overlapCount As Long
+        overlapCount = 0
+
+        For t = 0 To NUM_TYPES - 1
+            Dim g1 As Long
+            For g1 = 0 To numGroups - 2
+                For g2 = g1 + 1 To numGroups - 1
+                    ' Get g1's entity set
+                    rc = gp.Get(groupIDs(g1))
+                    If rc <> FE_OK Then GoTo NextPair
+                    Dim g1EntSet As femap.Set
+                    Set g1EntSet = gp.List(listTypes(t))
+                    If g1EntSet Is Nothing Then GoTo NextPair
+                    setA.Clear()
+                    setA.AddSet(g1EntSet.ID)
+                    If setA.Count = 0 Then GoTo NextPair
+
+                    ' Get g2's entity set
+                    rc = gp.Get(groupIDs(g2))
+                    If rc <> FE_OK Then GoTo NextPair
+                    Dim g2EntSet As femap.Set
+                    Set g2EntSet = gp.List(listTypes(t))
+                    If g2EntSet Is Nothing Then GoTo NextPair
+                    overlapSet.Clear()
+                    overlapSet.AddSet(g2EntSet.ID)
+                    If overlapSet.Count = 0 Then GoTo NextPair
+
+                    ' Intersect to find shared entities
+                    setA.RemoveNotCommon(overlapSet.ID)
+                    If setA.Count > 0 Then
+                        overlapText = overlapText + "  """ + groupTitles(g1) + """ and """ + _
+                            groupTitles(g2) + """ share" + Str$(setA.Count) + " " + _
+                            typeLabels(t) + Chr$(10)
+                        overlapCount = overlapCount + 1
+                    End If
+NextPair:
+                Next g2
+            Next g1
+        Next t
+
+        If overlapCount > 0 Then
+            App.feAppMessage(FCM_ERROR, "========================================")
+            App.feAppMessage(FCM_ERROR, "  Renumber Groups - Overlap Detected")
+            App.feAppMessage(FCM_ERROR, "========================================")
+
+            ' Print each overlap line to message pane
+            Dim olLines() As String
+            olLines = Split(overlapText, Chr$(10))
+            Dim olIdx As Long
+            For olIdx = 0 To UBound(olLines)
+                If Len(olLines(olIdx)) > 0 Then
+                    App.feAppMessage(FCM_ERROR, olLines(olIdx))
+                End If
+            Next olIdx
+
+            App.feAppMessage(FCM_ERROR, "========================================")
+
+            MsgBox "Overlapping groups detected - cannot renumber." & Chr$(10) & Chr$(10) & _
+                overlapText & Chr$(10) & _
+                "Remove shared entities so each entity belongs to only one group.", _
+                vbOKOnly + vbCritical, "Renumber Groups - Overlap Detected"
+            Exit Sub
+        End If
+    End If
+
+    ' =============================================
     ' Section 2.5: Partition Groups into Large/Small
     ' =============================================
     Dim sortOrder() As Long
