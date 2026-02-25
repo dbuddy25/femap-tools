@@ -158,8 +158,9 @@ NextType:
         Dim overlapCount As Long
         overlapCount = 0
 
+        Dim g1 As Long
+        Dim g2 As Long
         For t = 0 To NUM_TYPES - 1
-            Dim g1 As Long
             For g1 = 0 To numGroups - 2
                 For g2 = g1 + 1 To numGroups - 1
                     ' Get g1's entity set
@@ -520,7 +521,6 @@ NextConflictType:
     Next t
 
     ' Check for overlapping ranges between selected groups
-    Dim g2 As Long
     For g = 0 To numGroups - 2
         For g2 = g + 1 To numGroups - 1
             If startIDs(g) < startIDs(g2) + rangeSize(g2) And _
