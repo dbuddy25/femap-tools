@@ -584,7 +584,38 @@ NextPlace:
                 Do While Len(labelPad) < 16
                     labelPad = labelPad + " "
                 Loop
-                App.feAppMessage(FCM_NORMAL, "    " + labelPad + Str$(renumCounts(g, t)) + " renumbered")
+
+                ' Re-read group to get actual post-renumber ID range
+                Dim countStr As String
+                countStr = Str$(renumCounts(g, t)) + " renumbered"
+                Do While Len(countStr) < 16
+                    countStr = countStr + " "
+                Loop
+
+                Dim rangeStr As String
+                rangeStr = ""
+                rc = gp.Get(groupIDs(g))
+                If rc = FE_OK Then
+                    Dim postSet As femap.Set
+                    Set postSet = gp.List(listTypes(t))
+                    If Not postSet Is Nothing Then
+                        copySet.Clear()
+                        copySet.AddSet(postSet.ID)
+                        If copySet.Count > 0 Then
+                            Dim minID As Long, maxID As Long, walkID As Long
+                            minID = copySet.First()
+                            maxID = minID
+                            walkID = copySet.Next()
+                            Do While walkID > 0
+                                maxID = walkID
+                                walkID = copySet.Next()
+                            Loop
+                            rangeStr = "  [" + Str$(minID) + " -" + Str$(maxID) + "]"
+                        End If
+                    End If
+                End If
+
+                App.feAppMessage(FCM_NORMAL, "    " + labelPad + countStr + rangeStr)
             End If
         Next t
 
