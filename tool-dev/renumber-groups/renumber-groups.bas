@@ -722,8 +722,7 @@ NextPlace:
     Next g
 
     ' Calculate column widths (min = header label width)
-    Dim cGrp As Long, cTyp As Long, cCnt As Long, cMn As Long, cMx As Long
-    cGrp = 5   ' "Group"
+    Dim cTyp As Long, cCnt As Long, cMn As Long, cMx As Long
     cTyp = 4   ' "Type"
     cCnt = 5   ' "Count"
     cMn = 9    ' 9-digit IDs
@@ -731,7 +730,6 @@ NextPlace:
 
     Dim ri As Long
     For ri = 0 To rptRows - 1
-        If Len(groupTitles(rptGroup(ri))) > cGrp Then cGrp = Len(groupTitles(rptGroup(ri)))
         If Len(typeLabels(rptType(ri))) > cTyp Then cTyp = Len(typeLabels(rptType(ri)))
         If Len(CStr(rptCount(ri))) > cCnt Then cCnt = Len(CStr(rptCount(ri)))
         If Len(CStr(rptMin(ri))) > cMn Then cMn = Len(CStr(rptMin(ri)))
@@ -744,30 +742,35 @@ NextPlace:
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
 
     Dim rHdr As String
-    rHdr = "  " + Left$("Group" + Space$(cGrp), cGrp) + "  " + _
-           Left$("Type" + Space$(cTyp), cTyp) + "  " + _
+    rHdr = "  " + Left$("Type" + Space$(cTyp), cTyp) + "  " + _
            Right$(Space$(cCnt) + "Count", cCnt) + "  " + _
            Right$(Space$(cMn) + "Min ID", cMn) + "  " + _
            Right$(Space$(cMx) + "Max ID", cMx)
     App.feAppMessage(FCM_HIGHLIGHT, rHdr)
 
     Dim rSep As String
-    rSep = "  " + String$(cGrp, "-") + "  " + String$(cTyp, "-") + "  " + _
+    rSep = "  " + String$(cTyp, "-") + "  " + _
            String$(cCnt, "-") + "  " + String$(cMn, "-") + "  " + String$(cMx, "-")
     App.feAppMessage(FCM_HIGHLIGHT, rSep)
 
-    For ri = 0 To rptRows - 1
-        Dim rRow As String
-        rRow = "  " + Left$(groupTitles(rptGroup(ri)) + Space$(cGrp), cGrp) + "  " + _
-               Left$(typeLabels(rptType(ri)) + Space$(cTyp), cTyp) + "  " + _
-               Right$(Space$(cCnt) + CStr(rptCount(ri)), cCnt) + "  " + _
-               Right$(Space$(cMn) + CStr(rptMin(ri)), cMn) + "  " + _
-               Right$(Space$(cMx) + CStr(rptMax(ri)), cMx)
-        App.feAppMessage(FCM_NORMAL, rRow)
-    Next ri
-
     If rptRows = 0 Then
         App.feAppMessage(FCM_NORMAL, "  (no entities renumbered)")
+    Else
+        Dim lastGroup As Long
+        lastGroup = -1
+        For ri = 0 To rptRows - 1
+            If rptGroup(ri) <> lastGroup Then
+                App.feAppMessage(FCM_NORMAL, "")
+                App.feAppMessage(FCM_HIGHLIGHT, "  " + groupTitles(rptGroup(ri)))
+                lastGroup = rptGroup(ri)
+            End If
+            Dim rRow As String
+            rRow = "  " + Left$(typeLabels(rptType(ri)) + Space$(cTyp), cTyp) + "  " + _
+                   Right$(Space$(cCnt) + CStr(rptCount(ri)), cCnt) + "  " + _
+                   Right$(Space$(cMn) + CStr(rptMin(ri)), cMn) + "  " + _
+                   Right$(Space$(cMx) + CStr(rptMax(ri)), cMx)
+            App.feAppMessage(FCM_NORMAL, rRow)
+        Next ri
     End If
 
     App.feAppMessage(FCM_NORMAL, "")
