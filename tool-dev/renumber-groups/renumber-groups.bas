@@ -212,6 +212,7 @@ NextType:
     On Error GoTo 0
 
     xlApp.Visible = True
+    App.feAppMessage(FCM_NORMAL, "Building Excel spreadsheet, please wait...")
     Set xlWB = xlApp.Workbooks.Add
     Set ws = xlWB.Sheets(1)
     ws.Name = "Renumber Groups"
@@ -500,30 +501,59 @@ NextConflictType:
     Dim renumCounts() As Long
     ReDim renumCounts(numGroups - 1, NUM_TYPES - 1)
 
+    ' --- Pass 1: Evacuate all groups to temp range to clear target ranges ---
+    Const TEMP_BASE = 900000000
+    Dim tempOffset As Long
+    tempOffset = 0
+
+    App.feAppLock()
+    For g = 0 To numGroups - 1
+        For t = 0 To NUM_TYPES - 1
+            rc = gp.Get(groupIDs(g))
+            If rc <> FE_OK Then GoTo NextEvac
+
+            Dim evacEntSet As femap.Set
+            Set evacEntSet = gp.List(listTypes(t))
+            If evacEntSet Is Nothing Then GoTo NextEvac
+
+            workSet.Clear()
+            workSet.AddSet(evacEntSet.ID)
+            If workSet.Count = 0 Then GoTo NextEvac
+
+            rc = App.feRenumberOpt2(allFtTypes(t), workSet.ID, TEMP_BASE + tempOffset, _
+                0, 0, False, False, False, xyzOrder)
+NextEvac:
+        Next t
+        tempOffset = tempOffset + rangeSize(g)
+    Next g
+    App.feAppUnlock()
+
+    ' --- Pass 2: Place each group at its target start ID ---
+    App.feAppLock()
     For g = 0 To numGroups - 1
         For t = 0 To NUM_TYPES - 1
             renumCounts(g, t) = 0
 
-            ' Get entity set from group (must re-get each time due to stale ref)
+            ' Re-read group entity list (IDs changed in pass 1)
             rc = gp.Get(groupIDs(g))
-            If rc <> FE_OK Then GoTo NextRenum
+            If rc <> FE_OK Then GoTo NextPlace
 
-            Dim renumEntSet As femap.Set
-            Set renumEntSet = gp.List(listTypes(t))
-            If renumEntSet Is Nothing Then GoTo NextRenum
+            Dim placeEntSet As femap.Set
+            Set placeEntSet = gp.List(listTypes(t))
+            If placeEntSet Is Nothing Then GoTo NextPlace
 
-            ' Copy to working set (stale-ref pattern)
             workSet.Clear()
-            workSet.AddSet(renumEntSet.ID)
-            If workSet.Count = 0 Then GoTo NextRenum
+            workSet.AddSet(placeEntSet.ID)
+            If workSet.Count = 0 Then GoTo NextPlace
 
             renumCounts(g, t) = workSet.Count
 
             rc = App.feRenumberOpt2(allFtTypes(t), workSet.ID, startIDs(g), _
                 0, 0, False, False, False, xyzOrder)
-NextRenum:
+NextPlace:
         Next t
     Next g
+    App.feAppUnlock()
 
     App.feViewRegenerate(0)
 

@@ -2,7 +2,7 @@
 
 Renumbers all entities (nodes, elements, CSys, materials, properties) in selected groups into non-overlapping ID ranges with growth buffer. Uses an Excel spreadsheet for interactive confirmation and editing.
 
-**Last updated:** 2026-02-24
+**Last updated:** 2026-02-25
 
 ## Usage
 
@@ -30,7 +30,7 @@ Renumbers all entities (nodes, elements, CSys, materials, properties) in selecte
 | J   | Start ID   | **Yes**  | Yellow highlight — target start ID |
 | K   | End ID     | No       | Formula: Start ID + Range Size - 1 |
 | L   | Range Size | **Yes**  | Light yellow highlight — allocated range |
-| M   | Headroom   | No       | Next group's Start ID minus this group's End ID |
+| M   | Headroom   | No       | Range Size minus Max Count (unused IDs within allotted range) |
 
 ## How Ranges Work
 
@@ -58,5 +58,5 @@ Both append to the same warning list shown in the confirmation MsgBox.
 | 3       | Calculate range sizes (round to 100 or 1000) |
 | 4       | Excel spreadsheet: build, display, read back values |
 | 4→5     | Conflict check (entity + inter-group overlap) |
-| 5       | Execute renumbering via `feRenumberOpt2` |
+| 5       | Two-pass renumber: evacuate all groups to temp IDs (900M+), then place at target start IDs — prevents collisions when groups' current IDs overlap target ranges |
 | 6       | Report results to Femap message pane |
