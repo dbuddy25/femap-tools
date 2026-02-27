@@ -1,6 +1,6 @@
 ' export-contact-cards.bas
 ' Exports contact bulk data cards from a full NX Nastran deck.
-' Extracts BSURF/BSURFS, BCPROP/BCPROPS, BGSET/BGADD, BCTSET/BCTADD cards.
+' Extracts BSURF/BSURFS, BCPROP/BCPROPS, BGSET/BGADD, BCTSET/BCTADD, BGPARM cards.
 
 Sub Main
     Dim App As femap.model
@@ -38,7 +38,7 @@ Sub Main
     ' Step 3: Parse temp file, extract contact cards
     ' =============================================
     ' Target card types
-    Dim targets(7) As String
+    Dim targets(8) As String
     targets(0) = "BSURF"
     targets(1) = "BSURFS"
     targets(2) = "BCPROP"
@@ -47,11 +47,12 @@ Sub Main
     targets(5) = "BGADD"
     targets(6) = "BCTSET"
     targets(7) = "BCTADD"
+    targets(8) = "BGPARM"
 
     ' Card counters
-    Dim counts(7) As Long
+    Dim counts(8) As Long
     Dim i As Long
-    For i = 0 To 7
+    For i = 0 To 8
         counts(i) = 0
     Next i
 
@@ -74,6 +75,10 @@ Sub Main
     inContact = False
     lastContactIdx = -1
 
+    ' Only extract from Bulk Data section (skip Executive/Case Control)
+    Dim inBulk As Boolean
+    inBulk = False
+
     ' Comment buffer - collect $ lines, flush only if followed by contact card
     Dim commentBuf() As String
     Dim commentCount As Long
@@ -82,6 +87,14 @@ Sub Main
 
     Do While Not EOF(inFile)
         Line Input #inFile, ln
+
+        ' Only extract from Bulk Data section
+        If Not inBulk Then
+            If UCase$(Left$(Trim$(ln), 10)) = "BEGIN BULK" Then
+                inBulk = True
+            End If
+            GoTo NextLine
+        End If
 
         ' Get first 8 characters (card name field in small-field format)
         If Len(ln) >= 8 Then
@@ -117,7 +130,7 @@ Sub Main
             isTarget = False
             targetIdx = -1
 
-            For i = 0 To 7
+            For i = 0 To 8
                 If UCase$(cardName) = targets(i) Then
                     isTarget = True
                     targetIdx = i
@@ -143,6 +156,7 @@ Sub Main
                 commentCount = 0
             End If
         End If
+NextLine:
     Loop
 
     Close #inFile
@@ -156,7 +170,7 @@ Sub Main
     ' Check if any contact cards were found
     Dim totalCards As Long
     totalCards = 0
-    For i = 0 To 7
+    For i = 0 To 8
         totalCards = totalCards + counts(i)
     Next i
 
@@ -172,7 +186,7 @@ Sub Main
     End If
 
     ' Print counts for each card type that has entries
-    For i = 0 To 7
+    For i = 0 To 8
         If counts(i) > 0 Then
             App.feAppMessage(FCM_NORMAL, "  " + targets(i) + ": " + CStr(counts(i)))
         End If

@@ -1,6 +1,6 @@
 # Export Contact Cards
 
-Extracts all contact bulk data cards from a full NX Nastran deck export, preserving Femap's native contact representation (property-based, element-based, etc.).
+Extracts all contact bulk data cards from the Bulk Data section of a full NX Nastran deck export, preserving Femap's native contact representation (property-based, element-based, etc.).
 
 **Last updated:** 2026-02-27
 
@@ -24,6 +24,7 @@ Extracts all contact bulk data cards from a full NX Nastran deck export, preserv
 | **BGADD** | Combines multiple BGSETs |
 | **BCTSET** | Sliding/friction contact set |
 | **BCTADD** | Combines multiple BCTSETs |
+| **BGPARM** | Glued contact parameters |
 
 ## How It Works
 
