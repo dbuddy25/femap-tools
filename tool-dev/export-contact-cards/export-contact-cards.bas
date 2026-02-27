@@ -1,24 +1,6 @@
 ' export-contact-cards.bas
-' Exports BSURF/BGSET/BGADD bulk data cards for glued contact connectors
-' to a Nastran BDF include file.
-
-Function FormatField(s As String, w As Long) As String
-    If Len(s) >= w Then
-        FormatField = Left$(s, w)
-    Else
-        FormatField = s + Space$(w - Len(s))
-    End If
-End Function
-
-Function FormatInt(n As Long, w As Long) As String
-    Dim s As String
-    s = CStr(n)
-    If Len(s) >= w Then
-        FormatInt = s
-    Else
-        FormatInt = Space$(w - Len(s)) + s
-    End If
-End Function
+' Exports contact bulk data cards from a full NX Nastran deck.
+' Extracts BSURF/BSURFS, BCPROP/BCPROPS, BGSET/BGADD, BCTSET/BCTADD cards.
 
 Sub Main
     Dim App As femap.model
@@ -26,355 +8,178 @@ Sub Main
     Dim rc As Long
 
     ' =============================================
-    ' Section 1: Find Glued Connectors
+    ' Step 1: Write full NX Nastran deck to temp file
     ' =============================================
-    Dim cn As femap.Connection
-    Set cn = App.feConnection
-    Dim cp As femap.ConnectionProp
-    Set cp = App.feConnectionProp
-
-    Dim allConnSet As femap.Set
-    Set allConnSet = App.feSet
-    allConnSet.AddAll(FT_CONNECTION)
-
-    If allConnSet.Count = 0 Then
-        App.feAppMessage(FCM_ERROR, "No connectors found in model - exiting")
-        Exit Sub
-    End If
-
-    ' Filter to glued connectors only
-    Dim gluedSet As femap.Set
-    Set gluedSet = App.feSet
-    Dim cID As Long
-    cID = allConnSet.First()
-    Do While cID > 0
-        rc = cn.Get(cID)
-        If rc = FE_OK Then
-            rc = cp.Get(cn.propID)
-            If rc = FE_OK Then
-                If cp.type = 1 Then gluedSet.Add(cID)
-            End If
-        End If
-        cID = allConnSet.Next()
-    Loop
-
-    If gluedSet.Count = 0 Then
-        App.feAppMessage(FCM_ERROR, "No glued connectors found - exiting")
-        Exit Sub
-    End If
-
-    ' =============================================
-    ' Section 2: User Selection
-    ' =============================================
-    rc = gluedSet.Select(FT_CONNECTION, False, "Select Glued Connectors to Export")
+    Dim tempFile As String
+    tempFile = Environ$("TEMP") + "\femap_contact_export_temp.dat"
+    rc = App.feFileWriteNastran(8, tempFile)
     If rc <> FE_OK Then
-        App.feAppMessage(FCM_WARNING, "Selection cancelled - exiting")
-        Exit Sub
-    End If
-
-    If gluedSet.Count = 0 Then
-        App.feAppMessage(FCM_WARNING, "No connectors selected - exiting")
+        App.feAppMessage(FCM_ERROR, "Failed to write NX Nastran file (rc=" + CStr(rc) + ")")
+        App.feAppMessage(FCM_ERROR, "Ensure an NX Nastran analysis set is configured.")
         Exit Sub
     End If
 
     ' =============================================
-    ' Section 3: Collect Region Data
-    ' =============================================
-    Dim cr As femap.ConnectionRegion
-    Set cr = App.feConnectionRegion
-
-    Dim numConn As Long
-    numConn = gluedSet.Count
-
-    ' Connector arrays
-    Dim connIDs() As Long
-    Dim connTitles() As String
-    Dim connRgn0() As Long
-    Dim connRgn1() As Long
-    ReDim connIDs(numConn - 1)
-    ReDim connTitles(numConn - 1)
-    ReDim connRgn0(numConn - 1)
-    ReDim connRgn1(numConn - 1)
-
-    ' Collect unique region IDs
-    Dim rgnSet As femap.Set
-    Set rgnSet = App.feSet
-
-    Dim ci As Long
-    ci = 0
-    cID = gluedSet.First()
-    Do While cID > 0
-        rc = cn.Get(cID)
-        If rc = FE_OK Then
-            connIDs(ci) = cID
-            connTitles(ci) = cn.title
-            connRgn0(ci) = cn.contact(0)
-            connRgn1(ci) = cn.contact(1)
-            rgnSet.Add(cn.contact(0))
-            rgnSet.Add(cn.contact(1))
-        End If
-        ci = ci + 1
-        cID = gluedSet.Next()
-    Loop
-
-    ' Collect region data
-    Dim numRgn As Long
-    numRgn = rgnSet.Count
-    Dim rgnIDs() As Long
-    Dim rgnTitles() As String
-    Dim rgnElemCounts() As Long
-    ReDim rgnIDs(numRgn - 1)
-    ReDim rgnTitles(numRgn - 1)
-    ReDim rgnElemCounts(numRgn - 1)
-
-    ' Store element sets per region for BDF writing
-    ' Use parallel arrays of element ID arrays
-    Dim rgnElemIDs() As Variant
-    ReDim rgnElemIDs(numRgn - 1)
-
-    Dim ri As Long
-    ri = 0
-    Dim rID As Long
-    Dim hasWarning As Boolean
-    hasWarning = False
-
-    rID = rgnSet.First()
-    Do While rID > 0
-        rgnIDs(ri) = rID
-        rc = cr.Get(rID)
-        If rc = FE_OK Then
-            rgnTitles(ri) = cr.title
-
-            Dim elemSet As femap.Set
-            Set elemSet = cr.GetEntitySet(FT_ELEM, True)
-            If elemSet Is Nothing Then
-                rgnElemCounts(ri) = 0
-            Else
-                rgnElemCounts(ri) = elemSet.Count
-            End If
-
-            If rgnElemCounts(ri) = 0 Then
-                hasWarning = True
-                App.feAppMessage(FCM_WARNING, "Region " + Str$(rID) + " """ + _
-                    cr.title + """ has 0 elements (unmeshed geometry?)")
-            Else
-                ' Store element IDs for BDF writing
-                Dim eIDs() As Long
-                ReDim eIDs(rgnElemCounts(ri) - 1)
-                Dim eIdx As Long
-                eIdx = 0
-                Dim eID As Long
-                eID = elemSet.First()
-                Do While eID > 0
-                    eIDs(eIdx) = eID
-                    eIdx = eIdx + 1
-                    eID = elemSet.Next()
-                Loop
-                rgnElemIDs(ri) = eIDs
-            End If
-        Else
-            rgnTitles(ri) = "Region " + Str$(rID)
-            rgnElemCounts(ri) = 0
-            hasWarning = True
-            App.feAppMessage(FCM_WARNING, "Failed to read region" + Str$(rID))
-        End If
-
-        ri = ri + 1
-        rID = rgnSet.Next()
-    Loop
-
-    ' =============================================
-    ' Section 4: File Save Dialog
+    ' Step 2: File save dialog for output .bdf
     ' =============================================
     Dim fName As String
     rc = App.feFileGetName("Save Contact BDF File", "Nastran BDF", "*.bdf", False, fName)
     If rc <> FE_OK Then
         App.feAppMessage(FCM_WARNING, "File save cancelled - exiting")
+        Kill tempFile
         Exit Sub
     End If
 
-    ' Append .bdf if missing
     If LCase$(Right$(fName, 4)) <> ".bdf" Then
         fName = fName + ".bdf"
     End If
 
     ' =============================================
-    ' Section 5: Write BDF File
+    ' Step 3: Parse temp file, extract contact cards
     ' =============================================
-    Dim fNum As Long
-    fNum = FreeFile
-    Open fName For Output As #fNum
+    ' Target card types
+    Dim targets(7) As String
+    targets(0) = "BSURF"
+    targets(1) = "BSURFS"
+    targets(2) = "BCPROP"
+    targets(3) = "BCPROPS"
+    targets(4) = "BGSET"
+    targets(5) = "BGADD"
+    targets(6) = "BCTSET"
+    targets(7) = "BCTADD"
 
-    Print #fNum, "$ Contact bulk data exported from Femap"
-    Print #fNum, "$"
+    ' Card counters
+    Dim counts(7) As Long
+    Dim i As Long
+    For i = 0 To 7
+        counts(i) = 0
+    Next i
 
-    ' --- BSURF cards (one per region) ---
-    Dim r As Long
-    For r = 0 To numRgn - 1
-        If rgnElemCounts(r) = 0 Then GoTo NextBSURF
+    ' Read temp file, extract contact cards
+    Dim inFile As Long
+    inFile = FreeFile
+    Open tempFile For Input As #inFile
 
-        Print #fNum, "$ Region: " + rgnTitles(r)
-        Dim eArr As Variant
-        eArr = rgnElemIDs(r)
-        Dim nElems As Long
-        nElems = rgnElemCounts(r)
+    Dim outFile As Long
+    outFile = FreeFile
+    Open fName For Output As #outFile
 
-        ' First line: BSURF + SID + up to 6 EIDs (fields 3-8)
-        ' Continuation lines: 8-blank prefix + up to 8 EIDs
-        Dim bLine As String
-        bLine = FormatField("BSURF", 8) + FormatInt(rgnIDs(r), 8)
-        Dim ePos As Long
-        Dim lineElems As Long
-        Dim onFirstLine As Boolean
-        lineElems = 0
-        onFirstLine = True
+    Print #outFile, "$ Contact bulk data extracted from Femap"
+    Print #outFile, "$"
 
-        For ePos = 0 To nElems - 1
-            If lineElems = 0 And Not onFirstLine Then
-                bLine = Space$(8)
+    Dim ln As String
+    Dim cardName As String
+    Dim inContact As Boolean
+    Dim lastContactIdx As Long
+    inContact = False
+    lastContactIdx = -1
+
+    ' Comment buffer - collect $ lines, flush only if followed by contact card
+    Dim commentBuf() As String
+    Dim commentCount As Long
+    commentCount = 0
+    ReDim commentBuf(99)
+
+    Do While Not EOF(inFile)
+        Line Input #inFile, ln
+
+        ' Get first 8 characters (card name field in small-field format)
+        If Len(ln) >= 8 Then
+            cardName = Trim$(Left$(ln, 8))
+        Else
+            cardName = Trim$(ln)
+        End If
+
+        ' Handle large-field variants (e.g., *BSURF)
+        If Left$(cardName, 1) = "*" Then
+            cardName = Mid$(cardName, 2)
+        End If
+
+        ' Check what kind of line this is
+        If Left$(Trim$(ln), 1) = "$" Then
+            ' Comment line - buffer it
+            If commentCount > UBound(commentBuf) Then
+                ReDim Preserve commentBuf(commentCount + 99)
             End If
-            bLine = bLine + FormatInt(eArr(ePos), 8)
-            lineElems = lineElems + 1
+            commentBuf(commentCount) = ln
+            commentCount = commentCount + 1
 
-            Dim maxThisLine As Long
-            If onFirstLine Then maxThisLine = 6 Else maxThisLine = 8
-
-            If lineElems = maxThisLine Or ePos = nElems - 1 Then
-                Print #fNum, bLine
-                bLine = ""
-                lineElems = 0
-                onFirstLine = False
+        ElseIf cardName = "" Or Left$(cardName, 1) = "+" Or Left$(cardName, 1) = "*" Then
+            ' Continuation line - include if previous card was contact
+            If inContact Then
+                Print #outFile, ln
             End If
-        Next ePos
 
-NextBSURF:
-    Next r
+        Else
+            ' Check if this is a target contact card
+            Dim isTarget As Boolean
+            Dim targetIdx As Long
+            isTarget = False
+            targetIdx = -1
 
-    Print #fNum, "$"
+            For i = 0 To 7
+                If UCase$(cardName) = targets(i) Then
+                    isTarget = True
+                    targetIdx = i
+                    Exit For
+                End If
+            Next i
 
-    ' --- BGSET cards (one per connector) ---
-    Dim maxConnID As Long
-    maxConnID = 0
-    For ci = 0 To numConn - 1
-        Print #fNum, "$ Connector: " + connTitles(ci)
-        Dim bgLine As String
-        bgLine = FormatField("BGSET", 8) + FormatInt(connIDs(ci), 8) + _
-                 FormatInt(connRgn0(ci), 8) + FormatInt(connRgn1(ci), 8)
-        Print #fNum, bgLine
-        If connIDs(ci) > maxConnID Then maxConnID = connIDs(ci)
-    Next ci
+            If isTarget Then
+                ' Flush comment buffer before this contact card
+                Dim c As Long
+                For c = 0 To commentCount - 1
+                    Print #outFile, commentBuf(c)
+                Next c
+                commentCount = 0
 
-    ' --- BGADD card (only if >1 connector) ---
-    Dim bgaddID As Long
-    bgaddID = 0
-    If numConn > 1 Then
-        bgaddID = maxConnID + 100
-        Print #fNum, "$"
-
-        Dim baLine As String
-        baLine = FormatField("BGADD", 8) + FormatInt(bgaddID, 8)
-        Dim baCount As Long
-        Dim baFirstLine As Boolean
-        baCount = 0
-        baFirstLine = True
-        For ci = 0 To numConn - 1
-            If baCount = 0 And Not baFirstLine Then
-                baLine = Space$(8)
+                Print #outFile, ln
+                inContact = True
+                lastContactIdx = targetIdx
+                counts(targetIdx) = counts(targetIdx) + 1
+            Else
+                ' Non-contact card - stop collecting, clear comment buffer
+                inContact = False
+                commentCount = 0
             End If
-            baLine = baLine + FormatInt(connIDs(ci), 8)
-            baCount = baCount + 1
+        End If
+    Loop
 
-            Dim baMax As Long
-            If baFirstLine Then baMax = 6 Else baMax = 8
-
-            If baCount = baMax Or ci = numConn - 1 Then
-                Print #fNum, baLine
-                baLine = ""
-                baCount = 0
-                baFirstLine = False
-            End If
-        Next ci
-    End If
-
-    ' --- Case control comment ---
-    Print #fNum, "$"
-    If numConn = 1 Then
-        Print #fNum, "$ Case Control: BGSET = " + CStr(connIDs(0))
-    Else
-        Print #fNum, "$ Case Control: BGSET = " + CStr(bgaddID)
-    End If
-
-    Close #fNum
+    Close #inFile
+    Close #outFile
 
     ' =============================================
-    ' Section 6: Message Pane Summary
+    ' Step 4: Clean up temp file, report summary
     ' =============================================
-    ' Calculate column widths
-    Dim cTyp As Long, cCnt As Long, cBID As Long
-    cTyp = 4   ' "Type"
-    cCnt = 8   ' "Elements"
-    cBID = 8   ' "BSURF ID"
+    Kill tempFile
 
-    For r = 0 To numRgn - 1
-        If Len(CStr(rgnElemCounts(r))) > cCnt Then cCnt = Len(CStr(rgnElemCounts(r)))
-        If Len(CStr(rgnIDs(r))) > cBID Then cBID = Len(CStr(rgnIDs(r)))
-    Next r
+    ' Check if any contact cards were found
+    Dim totalCards As Long
+    totalCards = 0
+    For i = 0 To 7
+        totalCards = totalCards + counts(i)
+    Next i
 
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
     App.feAppMessage(FCM_HIGHLIGHT, "  Export Contact Cards")
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
 
-    Dim rHdr As String
-    rHdr = "  " + FormatField("Type", cTyp) + "  " + _
-           Right$(Space$(cCnt) + "Elements", cCnt) + "  " + _
-           Right$(Space$(cBID) + "BSURF ID", cBID)
-    App.feAppMessage(FCM_HIGHLIGHT, rHdr)
-
-    Dim rSep As String
-    rSep = "  " + String$(cTyp, "-") + "  " + String$(cCnt, "-") + _
-           "  " + String$(cBID, "-")
-    App.feAppMessage(FCM_HIGHLIGHT, rSep)
-
-    For r = 0 To numRgn - 1
-        App.feAppMessage(FCM_NORMAL, "")
-        App.feAppMessage(FCM_HIGHLIGHT, "  " + rgnTitles(r))
-
-        Dim rRow As String
-        If rgnElemCounts(r) > 0 Then
-            rRow = "  " + FormatField("Elem", cTyp) + "  " + _
-                   Right$(Space$(cCnt) + CStr(rgnElemCounts(r)), cCnt) + "  " + _
-                   Right$(Space$(cBID) + CStr(rgnIDs(r)), cBID)
-        Else
-            rRow = "  " + FormatField("Elem", cTyp) + "  " + _
-                   Right$(Space$(cCnt) + "0", cCnt) + "  " + _
-                   Right$(Space$(cBID) + "(skip)", cBID)
-        End If
-        App.feAppMessage(FCM_NORMAL, rRow)
-    Next r
-
-    ' Connector summary
-    App.feAppMessage(FCM_NORMAL, "")
-    App.feAppMessage(FCM_HIGHLIGHT, "  Connectors:")
-    For ci = 0 To numConn - 1
-        ' Find region titles for this connector
-        Dim srcTitle As String, tgtTitle As String
-        srcTitle = "Region " + CStr(connRgn0(ci))
-        tgtTitle = "Region " + CStr(connRgn1(ci))
-        For r = 0 To numRgn - 1
-            If rgnIDs(r) = connRgn0(ci) Then srcTitle = rgnTitles(r)
-            If rgnIDs(r) = connRgn1(ci) Then tgtTitle = rgnTitles(r)
-        Next r
-        App.feAppMessage(FCM_NORMAL, "  #" + CStr(ci + 1) + " " + srcTitle + _
-            " -> " + tgtTitle + " (BGSET " + CStr(connIDs(ci)) + ")")
-    Next ci
-
-    ' Case control and file path
-    App.feAppMessage(FCM_NORMAL, "")
-    If numConn = 1 Then
-        App.feAppMessage(FCM_HIGHLIGHT, "  Case Control: BGSET = " + CStr(connIDs(0)))
-    Else
-        App.feAppMessage(FCM_HIGHLIGHT, "  Case Control: BGSET = " + CStr(bgaddID))
+    If totalCards = 0 Then
+        App.feAppMessage(FCM_WARNING, "  No contact cards found in model!")
+        App.feAppMessage(FCM_NORMAL, "  File: " + fName)
+        App.feAppMessage(FCM_HIGHLIGHT, "========================================")
+        Exit Sub
     End If
+
+    ' Print counts for each card type that has entries
+    For i = 0 To 7
+        If counts(i) > 0 Then
+            App.feAppMessage(FCM_NORMAL, "  " + targets(i) + ": " + CStr(counts(i)))
+        End If
+    Next i
+
+    App.feAppMessage(FCM_NORMAL, "")
+    App.feAppMessage(FCM_NORMAL, "  Total: " + CStr(totalCards) + " cards")
     App.feAppMessage(FCM_NORMAL, "  File: " + fName)
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
 End Sub
