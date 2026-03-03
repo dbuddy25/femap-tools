@@ -2,6 +2,8 @@
 ' Renumbers all entities (nodes, elements, csys, materials, properties) in
 ' selected groups into non-overlapping ID ranges with growth buffer.
 ' Uses Excel spreadsheet for interactive confirmation and editing.
+' Groups marked "Skip" keep their current IDs and their occupied ID space
+' is reserved so other groups can be renumbered around them.
 
 Const NUM_TYPES = 5
 
@@ -92,6 +94,9 @@ Sub Main
     Dim curMaxID() As Long
     ReDim curMinID(numGroups - 1)
     ReDim curMaxID(numGroups - 1)
+
+    Dim skipGroup() As Boolean
+    ReDim skipGroup(numGroups - 1)
 
     Dim copySet As femap.Set
     Set copySet = App.feSet
@@ -344,9 +349,10 @@ NextPair:
     ws.Cells(1, 11).Value = "End ID"
     ws.Cells(1, 12).Value = "Range Size"
     ws.Cells(1, 13).Value = "Headroom"
+    ws.Cells(1, 14).Value = "Skip"
 
     ' Bold headers
-    ws.Range("A1:M1").Font.Bold = True
+    ws.Range("A1:N1").Font.Bold = True
 
     ' -- Data rows (two sections: small then large) --
     Dim curRow As Long
@@ -359,7 +365,7 @@ NextPair:
     ' -- Small groups section --
     If numSmall > 0 Then
         curRow = curRow + 1
-        ws.Range("A" & CStr(curRow) & ":M" & CStr(curRow)).Merge
+        ws.Range("A" & CStr(curRow) & ":N" & CStr(curRow)).Merge
         ws.Cells(curRow, 1).Value = "Small Groups (max <= 100)"
         ws.Cells(curRow, 1).Font.Bold = True
         ws.Cells(curRow, 1).Interior.Color = RGB(217, 217, 217)
@@ -389,6 +395,8 @@ NextPair:
             ws.Cells(curRow, 12).Value = rangeSize(gi)
             ws.Cells(curRow, 10).Interior.Color = RGB(255, 255, 153)
             ws.Cells(curRow, 12).Interior.Color = RGB(255, 255, 204)
+            ws.Cells(curRow, 14).Value = ""
+            ws.Cells(curRow, 14).Interior.Color = RGB(255, 255, 153)
         Next i
     End If
 
@@ -397,7 +405,7 @@ NextPair:
         If numSmall > 0 Then curRow = curRow + 1  ' Blank separator row
 
         curRow = curRow + 1
-        ws.Range("A" & CStr(curRow) & ":M" & CStr(curRow)).Merge
+        ws.Range("A" & CStr(curRow) & ":N" & CStr(curRow)).Merge
         ws.Cells(curRow, 1).Value = "Large Groups (max > 100)"
         ws.Cells(curRow, 1).Font.Bold = True
         ws.Cells(curRow, 1).Interior.Color = RGB(217, 217, 217)
@@ -427,6 +435,8 @@ NextPair:
             ws.Cells(curRow, 12).Value = rangeSize(gi)
             ws.Cells(curRow, 10).Interior.Color = RGB(255, 255, 153)
             ws.Cells(curRow, 12).Interior.Color = RGB(255, 255, 204)
+            ws.Cells(curRow, 14).Value = ""
+            ws.Cells(curRow, 14).Interior.Color = RGB(255, 255, 153)
         Next i
     End If
 
@@ -435,22 +445,31 @@ NextPair:
         ws.Cells(excelRows(i), 13).Formula = "=L" & CStr(excelRows(i)) & "-G" & CStr(excelRows(i))
     Next i
 
+    ' -- Data validation dropdown for Skip column --
+    On Error Resume Next
+    For i = 0 To numGroups - 1
+        ws.Cells(excelRows(i), 14).Validation.Add 3, 1, 1, "Yes,"
+    Next i
+    On Error GoTo 0
+
     ' -- Formatting --
     ' Auto-fit columns
-    ws.Columns("A:M").AutoFit
+    ws.Columns("A:N").AutoFit
 
-    ' -- Sheet protection: lock all except data cells in J and L --
+    ' -- Sheet protection: lock all except data cells in J, L, and N --
     Dim er As Long
     For er = 0 To numGroups - 1
         ws.Cells(excelRows(er), 10).Locked = False  ' Start ID
         ws.Cells(excelRows(er), 12).Locked = False  ' Range Size
+        ws.Cells(excelRows(er), 14).Locked = False  ' Skip
     Next er
     ws.Protect Password:=""
 
     ' -- Wait for user --
     Dim msgResult As Long
-    msgResult = MsgBox("Edit Start IDs (yellow) and Range Sizes (light yellow) in Excel," & _
-        Chr$(10) & "then click OK to proceed or Cancel to abort.", _
+    msgResult = MsgBox("Edit Start IDs (yellow) and Range Sizes (light yellow) in Excel." & _
+        Chr$(10) & "Type 'Yes' in the Skip column to keep a group's current IDs." & _
+        Chr$(10) & Chr$(10) & "Click OK to proceed or Cancel to abort.", _
         vbOKCancel + vbInformation, "Renumber Groups")
 
     ' -- Read back values --
@@ -487,12 +506,36 @@ NextPair:
         Exit Sub
     End If
 
-    ' Read Start IDs and Range Sizes from Excel (map sorted rows back to original indices)
+    ' Read Start IDs, Range Sizes, and Skip flags from Excel
+    Dim numSkipped As Long
+    numSkipped = 0
     For i = 0 To numGroups - 1
         gi = sortOrder(i)
         startIDs(gi) = CLng(ws.Cells(excelRows(i), 10).Value)  ' Column J
         rangeSize(gi) = CLng(ws.Cells(excelRows(i), 12).Value)  ' Column L
+
+        ' Column N: Skip flag
+        Dim skipVal As String
+        skipVal = Trim$(CStr(ws.Cells(excelRows(i), 14).Value))
+        If UCase$(skipVal) = "YES" Then
+            skipGroup(gi) = True
+            numSkipped = numSkipped + 1
+        Else
+            skipGroup(gi) = False
+        End If
     Next i
+
+    ' Override skipped groups with their actual occupied range
+    For g = 0 To numGroups - 1
+        If skipGroup(g) Then
+            startIDs(g) = curMinID(g)
+            If curMaxID(g) > 0 Then
+                rangeSize(g) = curMaxID(g) - curMinID(g) + 1
+            Else
+                rangeSize(g) = 0
+            End If
+        End If
+    Next g
 
     ' Close Excel
     On Error Resume Next
@@ -502,6 +545,12 @@ NextPair:
     Set ws = Nothing
     Set xlWB = Nothing
     Set xlApp = Nothing
+
+    ' Check if all groups are skipped
+    If numSkipped = numGroups Then
+        App.feAppMessage(FCM_WARNING, "All groups marked as Skip - nothing to renumber")
+        Exit Sub
+    End If
 
     ' -- Conflict check --
     Dim conflictText As String
@@ -522,35 +571,41 @@ NextPair:
         allEntSet.AddAll(allFtTypes(t))
         If allEntSet.Count = 0 Then GoTo NextConflictType
 
-        ' Remove entities that belong to any selected group
+        ' Remove entities that belong to non-skipped selected groups
+        ' (skipped groups' entities stay as obstacles for conflict detection)
         For g = 0 To numGroups - 1
-            rc = gp.Get(groupIDs(g))
-            If rc = FE_OK Then
-                Dim gpEntSet As femap.Set
-                Set gpEntSet = gp.List(listTypes(t))
-                If Not gpEntSet Is Nothing Then
-                    copySet.Clear()
-                    copySet.AddSet(gpEntSet.ID)
-                    allEntSet.RemoveSet(copySet.ID)
+            If Not skipGroup(g) Then
+                rc = gp.Get(groupIDs(g))
+                If rc = FE_OK Then
+                    Dim gpEntSet As femap.Set
+                    Set gpEntSet = gp.List(listTypes(t))
+                    If Not gpEntSet Is Nothing Then
+                        copySet.Clear()
+                        copySet.AddSet(gpEntSet.ID)
+                        allEntSet.RemoveSet(copySet.ID)
+                    End If
                 End If
             End If
         Next g
 
-        ' allEntSet now contains only entities outside the selected groups
-        ' Check each target range for overlap
+        ' allEntSet now contains entities outside non-skipped groups
+        ' (includes skipped groups' entities as obstacles)
+        ' Check each non-skipped group's target range for overlap
         If allEntSet.Count > 0 Then
             For g = 0 To numGroups - 1
-                rangeCheckSet.Clear()
-                rangeCheckSet.AddRange(startIDs(g), 1, startIDs(g) + rangeSize(g) - 1)
-                checkSet.Clear()
-                checkSet.AddSet(allEntSet.ID)
-                checkSet.RemoveNotCommon(rangeCheckSet.ID)
-                If checkSet.Count > 0 Then
-                    If conflictCount > 0 Then conflictText = conflictText + Chr$(10)
-                    conflictText = conflictText + "WARNING:" + Str$(checkSet.Count) + _
-                        " " + typeLabels(t) + " in range" + _
-                        Str$(startIDs(g)) + " -" + Str$(startIDs(g) + rangeSize(g) - 1)
-                    conflictCount = conflictCount + 1
+                If Not skipGroup(g) Then
+                    rangeCheckSet.Clear()
+                    rangeCheckSet.AddRange(startIDs(g), 1, startIDs(g) + rangeSize(g) - 1)
+                    checkSet.Clear()
+                    checkSet.AddSet(allEntSet.ID)
+                    checkSet.RemoveNotCommon(rangeCheckSet.ID)
+                    If checkSet.Count > 0 Then
+                        If conflictCount > 0 Then conflictText = conflictText + Chr$(10)
+                        conflictText = conflictText + "WARNING:" + Str$(checkSet.Count) + _
+                            " " + typeLabels(t) + " in range" + _
+                            Str$(startIDs(g)) + " -" + Str$(startIDs(g) + rangeSize(g) - 1)
+                        conflictCount = conflictCount + 1
+                    End If
                 End If
             Next g
         End If
@@ -558,8 +613,10 @@ NextConflictType:
     Next t
 
     ' Check for overlapping ranges between selected groups
+    ' (skip pairs where both groups are skipped)
     For g = 0 To numGroups - 2
         For g2 = g + 1 To numGroups - 1
+            If skipGroup(g) And skipGroup(g2) Then GoTo NextOverlapPair
             If startIDs(g) < startIDs(g2) + rangeSize(g2) And _
                startIDs(g2) < startIDs(g) + rangeSize(g) Then
                 If conflictCount > 0 Then conflictText = conflictText + Chr$(10)
@@ -567,27 +624,47 @@ NextConflictType:
                     groupTitles(g2) + """ ranges overlap"
                 conflictCount = conflictCount + 1
             End If
+NextOverlapPair:
         Next g2
     Next g
 
     ' -- Confirmation MsgBox --
     Dim totalEntities As Long
+    Dim skippedEntities As Long
     totalEntities = 0
+    skippedEntities = 0
     For g = 0 To numGroups - 1
         For t = 0 To NUM_TYPES - 1
-            totalEntities = totalEntities + entityCounts(g, t)
+            If skipGroup(g) Then
+                skippedEntities = skippedEntities + entityCounts(g, t)
+            Else
+                totalEntities = totalEntities + entityCounts(g, t)
+            End If
         Next t
     Next g
 
+    Dim numRenumber As Long
+    numRenumber = numGroups - numSkipped
+
     Dim confirmMsg As String
     Dim confirmStyle As Long
+    Dim skipNote As String
+    If numSkipped > 0 Then
+        skipNote = Chr$(10) + Str$(numSkipped) + " group(s) skipped (kept as-is)," + _
+            Str$(skippedEntities) + " entities unchanged."
+    Else
+        skipNote = ""
+    End If
+
     If conflictCount = 0 Then
-        confirmMsg = Str$(numGroups) + " groups," + Str$(totalEntities) + " entities." + _
+        confirmMsg = Str$(numRenumber) + " groups," + Str$(totalEntities) + " entities to renumber." + _
+            skipNote + _
             Chr$(10) + "No conflicts with existing IDs." + _
             Chr$(10) + Chr$(10) + "Proceed with renumbering?"
         confirmStyle = vbOKCancel + vbInformation
     Else
-        confirmMsg = Str$(numGroups) + " groups," + Str$(totalEntities) + " entities." + _
+        confirmMsg = Str$(numRenumber) + " groups," + Str$(totalEntities) + " entities to renumber." + _
+            skipNote + _
             Chr$(10) + Chr$(10) + conflictText + _
             Chr$(10) + Chr$(10) + "Proceed anyway?"
         confirmStyle = vbOKCancel + vbExclamation
@@ -613,57 +690,61 @@ NextConflictType:
     Dim renumCounts() As Long
     ReDim renumCounts(numGroups - 1, NUM_TYPES - 1)
 
-    ' --- Pass 1: Evacuate all groups to temp range to clear target ranges ---
+    ' --- Pass 1: Evacuate non-skipped groups to temp range ---
     Const TEMP_BASE = 900000000
     Dim tempOffset As Long
     tempOffset = 0
 
     App.feAppLock()
     For g = 0 To numGroups - 1
-        For t = 0 To NUM_TYPES - 1
-            rc = gp.Get(groupIDs(g))
-            If rc <> FE_OK Then GoTo NextEvac
+        If Not skipGroup(g) Then
+            For t = 0 To NUM_TYPES - 1
+                rc = gp.Get(groupIDs(g))
+                If rc <> FE_OK Then GoTo NextEvac
 
-            Dim evacEntSet As femap.Set
-            Set evacEntSet = gp.List(listTypes(t))
-            If evacEntSet Is Nothing Then GoTo NextEvac
+                Dim evacEntSet As femap.Set
+                Set evacEntSet = gp.List(listTypes(t))
+                If evacEntSet Is Nothing Then GoTo NextEvac
 
-            workSet.Clear()
-            workSet.AddSet(evacEntSet.ID)
-            If workSet.Count = 0 Then GoTo NextEvac
+                workSet.Clear()
+                workSet.AddSet(evacEntSet.ID)
+                If workSet.Count = 0 Then GoTo NextEvac
 
-            rc = App.feRenumberOpt2(allFtTypes(t), workSet.ID, TEMP_BASE + tempOffset, _
-                0, 0, False, False, False, xyzOrder)
+                rc = App.feRenumberOpt2(allFtTypes(t), workSet.ID, TEMP_BASE + tempOffset, _
+                    0, 0, False, False, False, xyzOrder)
 NextEvac:
-        Next t
+            Next t
+        End If
         tempOffset = tempOffset + rangeSize(g)
     Next g
     App.feAppUnlock()
 
-    ' --- Pass 2: Place each group at its target start ID ---
+    ' --- Pass 2: Place each non-skipped group at its target start ID ---
     App.feAppLock()
     For g = 0 To numGroups - 1
-        For t = 0 To NUM_TYPES - 1
-            renumCounts(g, t) = 0
+        If Not skipGroup(g) Then
+            For t = 0 To NUM_TYPES - 1
+                renumCounts(g, t) = 0
 
-            ' Re-read group entity list (IDs changed in pass 1)
-            rc = gp.Get(groupIDs(g))
-            If rc <> FE_OK Then GoTo NextPlace
+                ' Re-read group entity list (IDs changed in pass 1)
+                rc = gp.Get(groupIDs(g))
+                If rc <> FE_OK Then GoTo NextPlace
 
-            Dim placeEntSet As femap.Set
-            Set placeEntSet = gp.List(listTypes(t))
-            If placeEntSet Is Nothing Then GoTo NextPlace
+                Dim placeEntSet As femap.Set
+                Set placeEntSet = gp.List(listTypes(t))
+                If placeEntSet Is Nothing Then GoTo NextPlace
 
-            workSet.Clear()
-            workSet.AddSet(placeEntSet.ID)
-            If workSet.Count = 0 Then GoTo NextPlace
+                workSet.Clear()
+                workSet.AddSet(placeEntSet.ID)
+                If workSet.Count = 0 Then GoTo NextPlace
 
-            renumCounts(g, t) = workSet.Count
+                renumCounts(g, t) = workSet.Count
 
-            rc = App.feRenumberOpt2(allFtTypes(t), workSet.ID, startIDs(g), _
-                0, 0, False, False, False, xyzOrder)
+                rc = App.feRenumberOpt2(allFtTypes(t), workSet.ID, startIDs(g), _
+                    0, 0, False, False, False, xyzOrder)
 NextPlace:
-        Next t
+            Next t
+        End If
     Next g
     App.feAppUnlock()
 
@@ -773,7 +854,35 @@ NextPlace:
         Next ri
     End If
 
+    ' -- Skipped groups section --
+    If numSkipped > 0 Then
+        App.feAppMessage(FCM_NORMAL, "")
+        App.feAppMessage(FCM_HIGHLIGHT, "  Skipped (kept as-is):")
+        For g = 0 To numGroups - 1
+            If skipGroup(g) Then
+                Dim skipTotal As Long
+                skipTotal = 0
+                For t = 0 To NUM_TYPES - 1
+                    skipTotal = skipTotal + entityCounts(g, t)
+                Next t
+                Dim skipRange As String
+                If curMaxID(g) > 0 Then
+                    skipRange = Str$(skipTotal) + " entities, IDs" + _
+                        Str$(curMinID(g)) + " -" + Str$(curMaxID(g))
+                Else
+                    skipRange = "  0 entities"
+                End If
+                App.feAppMessage(FCM_NORMAL, "  " + groupTitles(g) + ":" + skipRange)
+            End If
+        Next g
+    End If
+
     App.feAppMessage(FCM_NORMAL, "")
-    App.feAppMessage(FCM_HIGHLIGHT, "  Total:" + Str$(totalEntities) + " entities renumbered")
+    If numSkipped > 0 Then
+        App.feAppMessage(FCM_HIGHLIGHT, "  Total:" + Str$(totalEntities) + " entities renumbered," + _
+            Str$(skippedEntities) + " entities skipped")
+    Else
+        App.feAppMessage(FCM_HIGHLIGHT, "  Total:" + Str$(totalEntities) + " entities renumbered")
+    End If
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
 End Sub
