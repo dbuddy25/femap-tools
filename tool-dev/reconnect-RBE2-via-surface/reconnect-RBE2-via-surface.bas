@@ -187,24 +187,38 @@ Sub Main
     ' =============================================
     Dim orphanCount As Long
     orphanCount = 0
-    Dim elemByNode As femap.Set
-    Set elemByNode = App.feSet
 
-    Dim nodeID As Long
-    nodeID = oldNodeSet.First()
-    Do While nodeID > 0
-        ' Skip if this node is also in the new set (still in use by the RBE2)
-        If Not newNodeSet.IsAdded(nodeID) Then
-            ' Check if any elements still reference this node
-            elemByNode.Clear()
-            elemByNode.AddRule(nodeID, FGD_ELEM_BYNODE)
-            If elemByNode.Count = 0 Then
-                rc = App.feDelete(FT_NODE, nodeID)
-                If rc = FE_OK Then orphanCount = orphanCount + 1
-            End If
+    ' Build candidate set: old nodes that are NOT in the new RBE2
+    Dim candidateSet As femap.Set
+    Set candidateSet = App.feSet
+    candidateSet.AddSet(oldNodeSet.ID)
+    candidateSet.RemoveSet(newNodeSet.ID)
+
+    If candidateSet.Count > 0 Then
+        ' Find all elements referencing any candidate node (one batch call)
+        Dim elemSet As femap.Set
+        Set elemSet = App.feSet
+        elemSet.AddSetRule(candidateSet.ID, FGD_ELEM_BYNODE)
+
+        If elemSet.Count > 0 Then
+            ' Find nodes still referenced by those elements (one batch call)
+            Dim usedNodeSet As femap.Set
+            Set usedNodeSet = App.feSet
+            usedNodeSet.AddSetRule(elemSet.ID, FGD_NODE_ONELEM)
+
+            ' Remove nodes still in use — remainder are true orphans
+            candidateSet.RemoveSet(usedNodeSet.ID)
         End If
-        nodeID = oldNodeSet.Next()
-    Loop
+
+        ' Delete orphan nodes
+        Dim nodeID As Long
+        nodeID = candidateSet.First()
+        Do While nodeID > 0
+            rc = App.feDelete(FT_NODE, nodeID)
+            If rc = FE_OK Then orphanCount = orphanCount + 1
+            nodeID = candidateSet.Next()
+        Loop
+    End If
 
     ' =============================================
     ' Section 8: Report
