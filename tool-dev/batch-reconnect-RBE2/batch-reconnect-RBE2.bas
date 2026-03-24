@@ -10,10 +10,76 @@ Sub Main
     Set App = feFemap()
     Dim rc As Long
 
+    ' All variable declarations up front
+    Dim el As femap.Elem
+    Dim nd As femap.Node
+    Dim rbe2Set As femap.Set
+    Dim surfSet As femap.Set
+    Dim tempNodeSet As femap.Set
+    Dim newNodeSet As femap.Set
+    Dim allOldNodes As femap.Set
+    Dim allNewNodes As femap.Set
+    Dim candidateSet As femap.Set
+    Dim refElemSet As femap.Set
+    Dim usedNodeSet As femap.Set
+
+    Dim rbe2IDs(MAX_ENT) As Long
+    Dim rbe2IndepNodes(MAX_ENT) As Long
+    Dim rbe2Cx(MAX_ENT) As Double
+    Dim rbe2Cy(MAX_ENT) As Double
+    Dim rbe2Cz(MAX_ENT) As Double
+    Dim rbe2OldCount(MAX_ENT) As Long
+    Dim rbe2DOF(MAX_ENT, 5) As Long
+    Dim rbe2NewCount(MAX_ENT) As Long
+    Dim rbe2SurfStr(MAX_ENT) As String
+    Dim rbe2MatchDist(MAX_ENT) As Double
+
+    Dim surfIDs(MAX_ENT) As Long
+    Dim surfCx(MAX_ENT) As Double
+    Dim surfCy(MAX_ENT) As Double
+    Dim surfCz(MAX_ENT) As Double
+    Dim surfMatchedRBE2(MAX_ENT) As Long
+
+    Dim numRBE2 As Long
+    Dim numSurfaces As Long
+    Dim r As Long
+    Dim s As Long
+    Dim i As Long
+    Dim d As Long
+    Dim elemID As Long
+    Dim surfID As Long
+    Dim nodeID As Long
+    Dim tempID As Long
+    Dim oldCount As Long
+    Dim newCount As Long
+    Dim matchCount As Long
+    Dim reconnected As Long
+    Dim orphanCount As Long
+    Dim validCount As Long
+    Dim sumX As Double
+    Dim sumY As Double
+    Dim sumZ As Double
+    Dim dx As Double
+    Dim dy As Double
+    Dim dz As Double
+    Dim dist As Double
+    Dim bestDist As Double
+    Dim bestRBE2 As Long
+    Dim vOldNodes As Variant
+    Dim vOldFaces As Variant
+    Dim vOldWeights As Variant
+    Dim vOldDOF As Variant
+    Dim vNewNodes As Variant
+    Dim vNewFaces As Variant
+    Dim vNewWeights As Variant
+    Dim vNewDOF As Variant
+
+    Set el = App.feElem
+    Set nd = App.feNode
+
     ' =============================================
     ' Section 1: Select RBE2 Elements
     ' =============================================
-    Dim rbe2Set As femap.Set
     Set rbe2Set = App.feSet
 
     rc = rbe2Set.Select(FT_ELEM, True, "Select RBE2 Elements to Reconnect")
@@ -23,9 +89,6 @@ Sub Main
     End If
 
     ' Validate all selected elements are RBE2s
-    Dim el As femap.Elem
-    Set el = App.feElem
-    Dim tempID As Long
     tempID = rbe2Set.First()
     Do While tempID > 0
         rc = el.Get(tempID)
@@ -40,7 +103,6 @@ Sub Main
         tempID = rbe2Set.Next()
     Loop
 
-    Dim numRBE2 As Long
     numRBE2 = rbe2Set.Count
 
     If numRBE2 > MAX_ENT Then
@@ -53,38 +115,15 @@ Sub Main
     ' =============================================
     ' Section 2: Read RBE2 Data + Compute Centroids
     ' =============================================
-    Dim nd As femap.Node
-    Set nd = App.feNode
-
-    Dim rbe2IDs(MAX_ENT) As Long
-    Dim rbe2IndepNodes(MAX_ENT) As Long
-    Dim rbe2Cx(MAX_ENT) As Double
-    Dim rbe2Cy(MAX_ENT) As Double
-    Dim rbe2Cz(MAX_ENT) As Double
-    Dim rbe2OldCount(MAX_ENT) As Long
-    Dim rbe2DOF(MAX_ENT, 5) As Long
-    Dim rbe2NewCount(MAX_ENT) As Long
-
-    ' Combined old node set for orphan cleanup
-    Dim allOldNodes As femap.Set
     Set allOldNodes = App.feSet
 
-    Dim r As Long
     r = 0
-    Dim elemID As Long
     elemID = rbe2Set.First()
 
     Do While elemID > 0
         rc = el.Get(elemID)
         rbe2IDs(r) = elemID
         rbe2IndepNodes(r) = el.node(0)
-
-        ' Get dependent nodes
-        Dim oldCount As Long
-        Dim vOldNodes As Variant
-        Dim vOldFaces As Variant
-        Dim vOldWeights As Variant
-        Dim vOldDOF As Variant
 
         rc = el.GetNodeList(0, oldCount, vOldNodes, vOldFaces, vOldWeights, vOldDOF)
         If rc <> FE_OK Then
@@ -95,19 +134,14 @@ Sub Main
         rbe2OldCount(r) = oldCount
 
         ' Store DOF pattern
-        Dim d As Long
         For d = 0 To 5
             rbe2DOF(r, d) = CLng(vOldDOF(d))
         Next d
 
         ' Compute centroid of old dependent nodes + add to combined set
-        Dim sumX As Double, sumY As Double, sumZ As Double
-        Dim validCount As Long
         sumX = 0: sumY = 0: sumZ = 0: validCount = 0
 
-        Dim i As Long
         For i = 0 To oldCount - 1
-            Dim nodeID As Long
             nodeID = CLng(vOldNodes(i))
             allOldNodes.Add(nodeID)
             rc = nd.Get(nodeID)
@@ -127,6 +161,8 @@ Sub Main
             App.feAppMessage(FCM_WARNING, "RBE2 " + Str$(elemID) + " has no readable dependent nodes")
         End If
 
+        App.feAppMessage(FCM_NORMAL, "RBE2 " + Str$(elemID) + " centroid: " + Str$(rbe2Cx(r)) + "," + Str$(rbe2Cy(r)) + "," + Str$(rbe2Cz(r)) + " (" + Str$(oldCount) + " dep nodes)")
+
         r = r + 1
         elemID = rbe2Set.Next()
     Loop
@@ -134,7 +170,6 @@ Sub Main
     ' =============================================
     ' Section 3: Select Surfaces
     ' =============================================
-    Dim surfSet As femap.Set
     Set surfSet = App.feSet
 
     rc = surfSet.Select(FT_SURFACE, True, "Select Surfaces for RBE2 Reconnection")
@@ -143,7 +178,6 @@ Sub Main
         Exit Sub
     End If
 
-    Dim numSurfaces As Long
     numSurfaces = surfSet.Count
 
     If numSurfaces > MAX_ENT Then
@@ -156,18 +190,9 @@ Sub Main
     ' =============================================
     ' Section 4: Compute Surface Centroids
     ' =============================================
-    Dim surfIDs(MAX_ENT) As Long
-    Dim surfCx(MAX_ENT) As Double
-    Dim surfCy(MAX_ENT) As Double
-    Dim surfCz(MAX_ENT) As Double
-    Dim surfMatchedRBE2(MAX_ENT) As Long
-
-    Dim tempNodeSet As femap.Set
     Set tempNodeSet = App.feSet
 
-    Dim s As Long
     s = 0
-    Dim surfID As Long
     surfID = surfSet.First()
 
     Do While surfID > 0
@@ -198,6 +223,8 @@ Sub Main
                 surfCy(s) = sumY / validCount
                 surfCz(s) = sumZ / validCount
             End If
+
+            App.feAppMessage(FCM_NORMAL, "Surface " + Str$(surfID) + " centroid: " + Str$(surfCx(s)) + "," + Str$(surfCy(s)) + "," + Str$(surfCz(s)) + " (" + Str$(tempNodeSet.Count) + " nodes)")
         End If
 
         s = s + 1
@@ -207,10 +234,6 @@ Sub Main
     ' =============================================
     ' Section 5: Match Surfaces to RBE2s
     ' =============================================
-    Dim dx As Double, dy As Double, dz As Double
-    Dim dist As Double, bestDist As Double
-    Dim bestRBE2 As Long
-
     For s = 0 To numSurfaces - 1
         bestDist = 1E+30
         bestRBE2 = -1
@@ -227,35 +250,23 @@ Sub Main
         surfMatchedRBE2(s) = bestRBE2
 
         If bestRBE2 >= 0 Then
-            App.feAppMessage(FCM_NORMAL, "Surface " + Str$(surfIDs(s)) + _
-                " -> RBE2 " + Str$(rbe2IDs(bestRBE2)) + " (dist=" + Format$(bestDist, "0.000") + ")")
+            App.feAppMessage(FCM_NORMAL, "Match: Surface " + Str$(surfIDs(s)) + " -> RBE2 " + Str$(rbe2IDs(bestRBE2)) + " (dist=" + Str$(Int(bestDist * 1000) / 1000) + ")")
         End If
     Next s
 
     ' =============================================
     ' Section 6: Reconnect Each RBE2
     ' =============================================
-    Dim newNodeSet As femap.Set
     Set newNodeSet = App.feSet
-
-    ' Combined new node set for orphan cleanup
-    Dim allNewNodes As femap.Set
     Set allNewNodes = App.feSet
 
-    Dim reconnected As Long
     reconnected = 0
-
-    ' Per-RBE2 surface list strings for the report
-    Dim rbe2SurfStr(MAX_ENT) As String
-    Dim rbe2MatchDist(MAX_ENT) As Double
 
     For r = 0 To numRBE2 - 1
         ' Build node set from all surfaces matched to this RBE2
         newNodeSet.Clear()
         rbe2SurfStr(r) = ""
         rbe2MatchDist(r) = 0
-
-        Dim matchCount As Long
         matchCount = 0
 
         For s = 0 To numSurfaces - 1
@@ -263,7 +274,6 @@ Sub Main
                 newNodeSet.AddRule(surfIDs(s), FGD_NODE_ATSURFACE)
                 If Len(rbe2SurfStr(r)) > 0 Then rbe2SurfStr(r) = rbe2SurfStr(r) + ", "
                 rbe2SurfStr(r) = rbe2SurfStr(r) + Trim$(Str$(surfIDs(s)))
-                ' Track distance to this RBE2's centroid
                 dx = surfCx(s) - rbe2Cx(r)
                 dy = surfCy(s) - rbe2Cy(r)
                 dz = surfCz(s) - rbe2Cz(r)
@@ -272,6 +282,8 @@ Sub Main
                 matchCount = matchCount + 1
             End If
         Next s
+
+        App.feAppMessage(FCM_NORMAL, "RBE2 " + Str$(rbe2IDs(r)) + ": " + Str$(matchCount) + " surface(s) matched, " + Str$(newNodeSet.Count) + " nodes before indep removal")
 
         If matchCount = 0 Then
             App.feAppMessage(FCM_WARNING, "RBE2 " + Str$(rbe2IDs(r)) + " - no surfaces matched, skipping")
@@ -292,16 +304,11 @@ Sub Main
         allNewNodes.AddSet(newNodeSet.ID)
 
         ' Build arrays
-        Dim newCount As Long
         newCount = newNodeSet.Count
         rbe2NewCount(r) = newCount
 
-        Dim vNewNodes As Variant
         newNodeSet.GetArray(newCount, vNewNodes)
 
-        Dim vNewFaces As Variant
-        Dim vNewWeights As Variant
-        Dim vNewDOF As Variant
         ReDim vNewFaces(newCount - 1)
         ReDim vNewWeights(newCount - 1)
         ReDim vNewDOF(newCount * 6 - 1)
@@ -323,16 +330,17 @@ Sub Main
 
         rc = el.PutNodeList(0, newCount, vNewNodes, vNewFaces, vNewWeights, vNewDOF)
         If rc <> FE_OK Then
-            App.feAppMessage(FCM_ERROR, "Failed to set node list for RBE2 " + Str$(rbe2IDs(r)))
+            App.feAppMessage(FCM_ERROR, "PutNodeList FAILED for RBE2 " + Str$(rbe2IDs(r)) + " rc=" + Str$(rc))
             GoTo NextRBE2
         End If
 
         rc = el.Put(rbe2IDs(r))
         If rc <> FE_OK Then
-            App.feAppMessage(FCM_ERROR, "Failed to save RBE2 " + Str$(rbe2IDs(r)))
+            App.feAppMessage(FCM_ERROR, "Put FAILED for RBE2 " + Str$(rbe2IDs(r)) + " rc=" + Str$(rc))
             GoTo NextRBE2
         End If
 
+        App.feAppMessage(FCM_NORMAL, "Updated RBE2 " + Str$(rbe2IDs(r)) + " with " + Str$(newCount) + " new dependent nodes")
         reconnected = reconnected + 1
 NextRBE2:
     Next r
@@ -340,25 +348,25 @@ NextRBE2:
     ' =============================================
     ' Section 7: Delete Orphaned Old Nodes
     ' =============================================
-    Dim orphanCount As Long
     orphanCount = 0
 
-    Dim candidateSet As femap.Set
     Set candidateSet = App.feSet
     candidateSet.AddSet(allOldNodes.ID)
     candidateSet.RemoveSet(allNewNodes.ID)
 
+    App.feAppMessage(FCM_NORMAL, "Orphan candidates: " + Str$(candidateSet.Count) + " (old=" + Str$(allOldNodes.Count) + " new=" + Str$(allNewNodes.Count) + ")")
+
     If candidateSet.Count > 0 Then
-        Dim refElemSet As femap.Set
         Set refElemSet = App.feSet
         refElemSet.AddSetRule(candidateSet.ID, FGD_ELEM_BYNODE)
 
         If refElemSet.Count > 0 Then
-            Dim usedNodeSet As femap.Set
             Set usedNodeSet = App.feSet
             usedNodeSet.AddSetRule(refElemSet.ID, FGD_NODE_ONELEM)
             candidateSet.RemoveSet(usedNodeSet.ID)
         End If
+
+        App.feAppMessage(FCM_NORMAL, "True orphans after element check: " + Str$(candidateSet.Count))
 
         nodeID = candidateSet.First()
         Do While nodeID > 0
@@ -381,19 +389,9 @@ NextRBE2:
     App.feAppMessage(FCM_NORMAL, "  Surfaces matched:        " + Str$(numSurfaces))
     App.feAppMessage(FCM_NORMAL, "  Orphaned nodes deleted:  " + Str$(orphanCount))
     App.feAppMessage(FCM_HIGHLIGHT, "------------------------------------------")
-    App.feAppMessage(FCM_NORMAL, "  RBE2     Indep   Surfaces          Old > New")
 
     For r = 0 To numRBE2 - 1
-        Dim line As String
-        line = "  " + Format$(rbe2IDs(r), "@@@@@@") + _
-               "  " + Format$(rbe2IndepNodes(r), "@@@@@@") + _
-               "   " + rbe2SurfStr(r)
-        ' Pad surface list to ~20 chars
-        Do While Len(line) < 52
-            line = line + " "
-        Loop
-        line = line + Str$(rbe2OldCount(r)) + " >" + Str$(rbe2NewCount(r))
-        App.feAppMessage(FCM_NORMAL, line)
+        App.feAppMessage(FCM_NORMAL, "  RBE2 " + Str$(rbe2IDs(r)) + " (indep " + Str$(rbe2IndepNodes(r)) + ") -> Surfs: " + rbe2SurfStr(r) + "  [" + Str$(rbe2OldCount(r)) + " >" + Str$(rbe2NewCount(r)) + "]")
     Next r
 
     App.feAppMessage(FCM_HIGHLIGHT, "==========================================")
