@@ -288,6 +288,9 @@ Sub Main
         End If
 
         If Not skipRBE2 Then
+            ' Remove old dependent nodes (may still be on surface from prior mesh)
+            newNodeSet.RemoveSet(allOldNodes.ID)
+
             ' Remove the independent node
             newNodeSet.Remove(rbe2IndepNodes(r))
 

@@ -130,6 +130,9 @@ Sub Main
         Exit Sub
     End If
 
+    ' Remove old dependent nodes (may still be on surface from prior mesh)
+    newNodeSet.RemoveSet(oldNodeSet.ID)
+
     ' Remove the independent node if it happens to be on a selected surface
     newNodeSet.Remove(indepNode)
 
