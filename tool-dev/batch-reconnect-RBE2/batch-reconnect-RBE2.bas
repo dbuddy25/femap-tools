@@ -283,7 +283,7 @@ Sub Main
             End If
         Next s
 
-        App.feAppMessage(FCM_NORMAL, "RBE2 " + Str$(rbe2IDs(r)) + ": " + Str$(matchCount) + " surface(s) matched, " + Str$(newNodeSet.Count) + " nodes before indep removal")
+        App.feAppMessage(FCM_NORMAL, "RBE2 " + Str$(rbe2IDs(r)) + ": " + Str$(matchCount) + " surface(s) matched, " + Str$(newNodeSet.Count) + " surface nodes")
 
         If matchCount = 0 Then
             App.feAppMessage(FCM_WARNING, "RBE2 " + Str$(rbe2IDs(r)) + " - no surfaces matched, skipping")
@@ -291,8 +291,13 @@ Sub Main
             GoTo NextRBE2
         End If
 
+        ' Remove old dependent nodes (may still be on surface from prior mesh)
+        newNodeSet.RemoveSet(allOldNodes.ID)
+
         ' Remove the independent node
         newNodeSet.Remove(rbe2IndepNodes(r))
+
+        App.feAppMessage(FCM_NORMAL, "  After removing old deps + indep: " + Str$(newNodeSet.Count) + " new nodes")
 
         If newNodeSet.Count = 0 Then
             App.feAppMessage(FCM_WARNING, "RBE2 " + Str$(rbe2IDs(r)) + " - no dependent nodes on matched surfaces")
