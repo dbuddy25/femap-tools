@@ -196,15 +196,15 @@ Sub Main
 
     If candidateSet.Count > 0 Then
         ' Find all elements referencing any candidate node (one batch call)
-        Dim elemSet As femap.Set
-        Set elemSet = App.feSet
-        elemSet.AddSetRule(candidateSet.ID, FGD_ELEM_BYNODE)
+        Dim refElemSet As femap.Set
+        Set refElemSet = App.feSet
+        refElemSet.AddSetRule(candidateSet.ID, FGD_ELEM_BYNODE)
 
-        If elemSet.Count > 0 Then
+        If refElemSet.Count > 0 Then
             ' Find nodes still referenced by those elements (one batch call)
             Dim usedNodeSet As femap.Set
             Set usedNodeSet = App.feSet
-            usedNodeSet.AddSetRule(elemSet.ID, FGD_NODE_ONELEM)
+            usedNodeSet.AddSetRule(refElemSet.ID, FGD_NODE_ONELEM)
 
             ' Remove nodes still in use — remainder are true orphans
             candidateSet.RemoveSet(usedNodeSet.ID)
