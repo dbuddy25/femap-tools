@@ -32,7 +32,6 @@ Sub Main
     Dim rbe2DOF(MAX_ENT, 5) As Long
     Dim rbe2NewCount(MAX_ENT) As Long
     Dim rbe2SurfStr(MAX_ENT) As String
-    Dim rbe2MatchDist(MAX_ENT) As Double
 
     Dim surfIDs(MAX_ENT) As Long
     Dim surfCx(MAX_ENT) As Double
@@ -65,6 +64,7 @@ Sub Main
     Dim dist As Double
     Dim bestDist As Double
     Dim bestRBE2 As Long
+    Dim skipRBE2 As Boolean
     Dim vOldNodes As Variant
     Dim vOldFaces As Variant
     Dim vOldWeights As Variant
@@ -224,7 +224,7 @@ Sub Main
                 surfCz(s) = sumZ / validCount
             End If
 
-            App.feAppMessage(FCM_NORMAL, "Surface " + Str$(surfID) + " centroid: " + Str$(surfCx(s)) + "," + Str$(surfCy(s)) + "," + Str$(surfCz(s)) + " (" + Str$(tempNodeSet.Count) + " nodes)")
+            App.feAppMessage(FCM_NORMAL, "Surface " + Str$(surfID) + ": " + Str$(tempNodeSet.Count) + " nodes, centroid: " + Str$(surfCx(s)) + "," + Str$(surfCy(s)) + "," + Str$(surfCz(s)))
         End If
 
         s = s + 1
@@ -263,10 +263,11 @@ Sub Main
     reconnected = 0
 
     For r = 0 To numRBE2 - 1
+        skipRBE2 = False
+
         ' Build node set from all surfaces matched to this RBE2
         newNodeSet.Clear()
         rbe2SurfStr(r) = ""
-        rbe2MatchDist(r) = 0
         matchCount = 0
 
         For s = 0 To numSurfaces - 1
@@ -274,80 +275,81 @@ Sub Main
                 newNodeSet.AddRule(surfIDs(s), FGD_NODE_ATSURFACE)
                 If Len(rbe2SurfStr(r)) > 0 Then rbe2SurfStr(r) = rbe2SurfStr(r) + ", "
                 rbe2SurfStr(r) = rbe2SurfStr(r) + Trim$(Str$(surfIDs(s)))
-                dx = surfCx(s) - rbe2Cx(r)
-                dy = surfCy(s) - rbe2Cy(r)
-                dz = surfCz(s) - rbe2Cz(r)
-                dist = Sqr(dx * dx + dy * dy + dz * dz)
-                If dist > rbe2MatchDist(r) Then rbe2MatchDist(r) = dist
                 matchCount = matchCount + 1
             End If
         Next s
 
-        App.feAppMessage(FCM_NORMAL, "RBE2 " + Str$(rbe2IDs(r)) + ": " + Str$(matchCount) + " surface(s) matched, " + Str$(newNodeSet.Count) + " surface nodes")
+        App.feAppMessage(FCM_NORMAL, "RBE2 " + Str$(rbe2IDs(r)) + ": " + Str$(matchCount) + " surface(s), " + Str$(newNodeSet.Count) + " nodes")
 
         If matchCount = 0 Then
             App.feAppMessage(FCM_WARNING, "RBE2 " + Str$(rbe2IDs(r)) + " - no surfaces matched, skipping")
             rbe2NewCount(r) = 0
-            GoTo NextRBE2
+            skipRBE2 = True
         End If
 
-        ' Remove old dependent nodes (may still be on surface from prior mesh)
-        newNodeSet.RemoveSet(allOldNodes.ID)
+        If Not skipRBE2 Then
+            ' Remove the independent node
+            newNodeSet.Remove(rbe2IndepNodes(r))
 
-        ' Remove the independent node
-        newNodeSet.Remove(rbe2IndepNodes(r))
+            App.feAppMessage(FCM_NORMAL, "  After removing indep node: " + Str$(newNodeSet.Count) + " nodes")
 
-        App.feAppMessage(FCM_NORMAL, "  After removing old deps + indep: " + Str$(newNodeSet.Count) + " new nodes")
-
-        If newNodeSet.Count = 0 Then
-            App.feAppMessage(FCM_WARNING, "RBE2 " + Str$(rbe2IDs(r)) + " - no dependent nodes on matched surfaces")
-            rbe2NewCount(r) = 0
-            GoTo NextRBE2
+            If newNodeSet.Count = 0 Then
+                App.feAppMessage(FCM_WARNING, "RBE2 " + Str$(rbe2IDs(r)) + " - no dependent nodes on matched surfaces")
+                rbe2NewCount(r) = 0
+                skipRBE2 = True
+            End If
         End If
 
-        ' Add to combined new node set
-        allNewNodes.AddSet(newNodeSet.ID)
+        If Not skipRBE2 Then
+            ' Add to combined new node set
+            allNewNodes.AddSet(newNodeSet.ID)
 
-        ' Build arrays
-        newCount = newNodeSet.Count
-        rbe2NewCount(r) = newCount
+            ' Build arrays
+            newCount = newNodeSet.Count
+            rbe2NewCount(r) = newCount
 
-        newNodeSet.GetArray(newCount, vNewNodes)
+            newNodeSet.GetArray(newCount, vNewNodes)
 
-        ReDim vNewFaces(newCount - 1)
-        ReDim vNewWeights(newCount - 1)
-        ReDim vNewDOF(newCount * 6 - 1)
+            ReDim vNewFaces(newCount - 1)
+            ReDim vNewWeights(newCount - 1)
+            ReDim vNewDOF(newCount * 6 - 1)
 
-        For i = 0 To newCount - 1
-            vNewFaces(i) = CLng(0)
-            vNewWeights(i) = CDbl(0)
-            For d = 0 To 5
-                vNewDOF(i * 6 + d) = rbe2DOF(r, d)
-            Next d
-        Next i
+            For i = 0 To newCount - 1
+                vNewFaces(i) = CLng(0)
+                vNewWeights(i) = CDbl(0)
+                For d = 0 To 5
+                    vNewDOF(i * 6 + d) = rbe2DOF(r, d)
+                Next d
+            Next i
 
-        ' Update the element
-        rc = el.Get(rbe2IDs(r))
-        If rc <> FE_OK Then
-            App.feAppMessage(FCM_ERROR, "Failed to re-read RBE2 " + Str$(rbe2IDs(r)))
-            GoTo NextRBE2
+            ' Update the element
+            rc = el.Get(rbe2IDs(r))
+            If rc <> FE_OK Then
+                App.feAppMessage(FCM_ERROR, "Failed to re-read RBE2 " + Str$(rbe2IDs(r)))
+                skipRBE2 = True
+            End If
         End If
 
-        rc = el.PutNodeList(0, newCount, vNewNodes, vNewFaces, vNewWeights, vNewDOF)
-        If rc <> FE_OK Then
-            App.feAppMessage(FCM_ERROR, "PutNodeList FAILED for RBE2 " + Str$(rbe2IDs(r)) + " rc=" + Str$(rc))
-            GoTo NextRBE2
+        If Not skipRBE2 Then
+            rc = el.PutNodeList(0, newCount, vNewNodes, vNewFaces, vNewWeights, vNewDOF)
+            If rc <> FE_OK Then
+                App.feAppMessage(FCM_ERROR, "PutNodeList FAILED for RBE2 " + Str$(rbe2IDs(r)) + " rc=" + Str$(rc))
+                skipRBE2 = True
+            End If
         End If
 
-        rc = el.Put(rbe2IDs(r))
-        If rc <> FE_OK Then
-            App.feAppMessage(FCM_ERROR, "Put FAILED for RBE2 " + Str$(rbe2IDs(r)) + " rc=" + Str$(rc))
-            GoTo NextRBE2
+        If Not skipRBE2 Then
+            rc = el.Put(rbe2IDs(r))
+            If rc <> FE_OK Then
+                App.feAppMessage(FCM_ERROR, "Put FAILED for RBE2 " + Str$(rbe2IDs(r)) + " rc=" + Str$(rc))
+                skipRBE2 = True
+            End If
         End If
 
-        App.feAppMessage(FCM_NORMAL, "Updated RBE2 " + Str$(rbe2IDs(r)) + " with " + Str$(newCount) + " new dependent nodes")
-        reconnected = reconnected + 1
-NextRBE2:
+        If Not skipRBE2 Then
+            App.feAppMessage(FCM_NORMAL, "Updated RBE2 " + Str$(rbe2IDs(r)) + " with " + Str$(newCount) + " new dependent nodes")
+            reconnected = reconnected + 1
+        End If
     Next r
 
     ' =============================================
