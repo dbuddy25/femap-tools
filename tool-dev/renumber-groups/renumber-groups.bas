@@ -453,8 +453,13 @@ NextPair:
     On Error GoTo 0
 
     ' -- Formatting --
-    ' Auto-fit columns
+    ' Force integer display for ID columns (prevents exponential notation)
+    ws.Columns("H:L").NumberFormat = "0"
+
+    ' Auto-fit columns then enforce minimum widths for large IDs
     ws.Columns("A:N").AutoFit
+    If ws.Columns("J").ColumnWidth < 12 Then ws.Columns("J").ColumnWidth = 12
+    If ws.Columns("K").ColumnWidth < 12 Then ws.Columns("K").ColumnWidth = 12
 
     ' -- Sheet protection: lock all except data cells in J, L, and N --
     Dim er As Long
