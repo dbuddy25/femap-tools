@@ -73,6 +73,9 @@ Sub Main
     Dim vNewFaces As Variant
     Dim vNewWeights As Variant
     Dim vNewDOF As Variant
+    Dim attempted As Long
+    Dim vCandIDs As Variant
+    Dim survivedMsg As String
 
     Set el = App.feElem
     Set nd = App.feNode
@@ -378,12 +381,107 @@ Sub Main
 
         App.feAppMessage(FCM_NORMAL, "True orphans after element check: " + Str$(candidateSet.Count))
 
-        nodeID = candidateSet.First()
-        Do While nodeID > 0
-            rc = App.feDelete(FT_NODE, nodeID)
-            If rc = FE_OK Then orphanCount = orphanCount + 1
-            nodeID = candidateSet.Next()
-        Loop
+        attempted = candidateSet.Count
+        rc = candidateSet.GetArray(attempted, vCandIDs)
+        rc = App.feDelete(FT_NODE, candidateSet.ID)
+
+        Dim bcChk As femap.BCNode
+        Dim bcSetChk As femap.BCSet
+        Dim ldChk As femap.LoadMesh
+        Dim ldSetChk As femap.LoadSet
+        Dim oneNdSet As femap.Set
+        Dim chkElSet As femap.Set
+        Dim reasons As String
+        Dim nID As Long
+        Dim elRefID As Long
+        Dim elRefStr As String
+        Dim firstEl As Boolean
+        Dim bcSetStr As String
+        Dim ldSetStr As String
+        Dim foundInSet As Boolean
+        Dim ldRc As Long
+        Set bcChk = App.feBCNode
+        Set bcSetChk = App.feBCSet
+        Set ldChk = App.feLoadMesh
+        Set ldSetChk = App.feLoadSet
+
+        survivedMsg = ""
+        For i = 0 To attempted - 1
+            nID = CLng(vCandIDs(i))
+            If nd.Get(nID) <> FE_OK Then
+                orphanCount = orphanCount + 1
+            Else
+                reasons = ""
+
+                ' Check elements
+                Set oneNdSet = App.feSet
+                oneNdSet.Add(nID)
+                Set chkElSet = App.feSet
+                chkElSet.AddSetRule(oneNdSet.ID, FGD_ELEM_BYNODE)
+                If chkElSet.Count > 0 Then
+                    elRefStr = "elem["
+                    elRefID = chkElSet.First()
+                    firstEl = True
+                    Do While elRefID > 0
+                        If Not firstEl Then elRefStr = elRefStr + ","
+                        elRefStr = elRefStr + Trim$(Str$(elRefID))
+                        firstEl = False
+                        elRefID = chkElSet.Next()
+                    Loop
+                    reasons = reasons + elRefStr + "]"
+                End If
+
+                ' Check constraint sets
+                bcSetStr = ""
+                rc = bcSetChk.First()
+                Do While rc = FE_OK
+                    bcChk.setID = bcSetChk.ID
+                    If bcChk.Get(nID) = FE_OK Then
+                        If Len(bcSetStr) > 0 Then bcSetStr = bcSetStr + ","
+                        bcSetStr = bcSetStr + Trim$(Str$(bcSetChk.ID))
+                    End If
+                    rc = bcSetChk.Next()
+                Loop
+                If Len(bcSetStr) > 0 Then
+                    If Len(reasons) > 0 Then reasons = reasons + " "
+                    reasons = reasons + "BC[set " + bcSetStr + "]"
+                End If
+
+                ' Check load sets
+                ldSetStr = ""
+                rc = ldSetChk.First()
+                Do While rc = FE_OK
+                    ldChk.setID = ldSetChk.ID
+                    foundInSet = False
+                    ldRc = ldChk.First()
+                    Do While ldRc = FE_OK And Not foundInSet
+                        If ldChk.meshID = nID Then
+                            foundInSet = True
+                        Else
+                            ldRc = ldChk.Next()
+                        End If
+                    Loop
+                    If foundInSet Then
+                        If Len(ldSetStr) > 0 Then ldSetStr = ldSetStr + ","
+                        ldSetStr = ldSetStr + Trim$(Str$(ldSetChk.ID))
+                    End If
+                    rc = ldSetChk.Next()
+                Loop
+                If Len(ldSetStr) > 0 Then
+                    If Len(reasons) > 0 Then reasons = reasons + " "
+                    reasons = reasons + "load[set " + ldSetStr + "]"
+                End If
+
+                If Len(reasons) = 0 Then reasons = "geometry or locked group"
+                If Len(survivedMsg) > 0 Then survivedMsg = survivedMsg + "; "
+                survivedMsg = survivedMsg + "Node " + Trim$(Str$(nID)) + " (" + reasons + ")"
+            End If
+        Next i
+
+        If orphanCount < attempted Then
+            App.feAppMessage(FCM_WARNING, "  " + Str$(attempted - orphanCount) _
+                + " orphan node(s) could not be deleted: " + survivedMsg)
+        End If
     End If
 
     ' =============================================
