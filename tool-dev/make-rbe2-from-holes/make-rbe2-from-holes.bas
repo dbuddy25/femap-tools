@@ -14,11 +14,12 @@
 '   - creates a new independent node at the centroid of those nodes (on the axis,
 '     or the in-plane circle center for a shell hole)
 '   - creates an RBE2 (rigid): independent = center node, dependent = bore/edge
-'     nodes, all 6 DOF (123456) coupled.
+'     nodes. Dependent DOF follows the mode: 123 for surfaces (solid nodes have no
+'     rotational stiffness), 123456 for curves (shell nodes carry rotations).
 '
 ' Options (single confirm dialog before anything is written to the model):
-'   - apply a thermal expansion coefficient (CTE) to the created RBE2s
-'   - collect the new center nodes + RBE2 elements into a group
+'   - apply a thermal expansion coefficient (CTE) to the created RBE2s: either pick
+'     a model material (uses its thermal-expansion coeff) or enter a value.
 '
 ' Assumptions / limits (v1):
 '   - Select ONLY hole surfaces (or curves) of one geometry type per run. Entities
@@ -58,6 +59,20 @@ Sub Main
         geomEnt = FT_CURVE   : ptRule = FGD_POINT_ONCURVE   : nodeRule = FGD_NODE_ATCURVE   : geomWord = "curve"
     Else
         geomEnt = FT_SURFACE : ptRule = FGD_POINT_ONSURFACE : nodeRule = FGD_NODE_ATSURFACE : geomWord = "surface"
+    End If
+
+    ' Dependent-node DOF by mode: solid (surface) nodes have no rotational
+    ' stiffness -> couple 123 only; shell (curve) nodes carry rotations -> 123456.
+    Dim depDOF(5) As Long, dofStr As String
+    For d = 0 To 5
+        depDOF(d) = 0
+    Next d
+    depDOF(0) = 1 : depDOF(1) = 1 : depDOF(2) = 1
+    If mdlg.geomType = 1 Then
+        depDOF(3) = 1 : depDOF(4) = 1 : depDOF(5) = 1
+        dofStr = "123456"
+    Else
+        dofStr = "123"
     End If
 
     ' ============================================================
@@ -205,25 +220,63 @@ Sub Main
         line4 = ""
     End If
 
-    Begin Dialog HoleDlg 330, 222, "Create RBE2 Spiders from Holes"
+    Dim dofLine As String
+    dofLine = "RBE2 dependent DOF: " + dofStr + "   (" + geomWord + " mode)"
+
+    ' Build the material list for the CTE dropdown
+    Dim mtl As femap.Matl
+    Set mtl = App.feMatl
+    Dim matCount As Long
+    matCount = 0
+    mtl.Reset
+    Do While mtl.Next()
+        matCount = matCount + 1
+    Loop
+
+    Dim matIDs() As Long
+    Dim matNames() As String
+    If matCount > 0 Then
+        ReDim matIDs(matCount - 1)
+        ReDim matNames(matCount - 1)
+        Dim mi As Long
+        mi = 0
+        mtl.Reset
+        Do While mtl.Next()
+            matIDs(mi)   = mtl.ID
+            matNames(mi) = Trim$(Str$(mtl.ID)) + " - " + mtl.title
+            mi = mi + 1
+        Loop
+    Else
+        ReDim matIDs(0)
+        ReDim matNames(0)
+        matIDs(0)   = 0
+        matNames(0) = "(no materials in model)"
+    End If
+
+    Begin Dialog HoleDlg 330, 252, "Create RBE2 Spiders from Holes"
         Text       12, 8,  306, 12, line1
         Text       12, 22, 306, 12, line2
         Text       12, 36, 306, 12, line3
         Text       12, 50, 306, 12, line4
-        GroupBox   12, 70, 306, 56, "Thermal expansion"
-        CheckBox   22, 86, 250, 12, "Apply CTE (thermal expansion coeff) to RBE2s", .chkCTE
-        Text       22, 104, 60, 12, "CTE value:"
-        TextBox    86, 102, 90, 12, .cteVal
-        CheckBox   12, 136, 306, 12, "Put new center nodes + RBE2s in a group", .chkGroup
-        Text       12, 156, 306, 12, "Click OK to create the spiders, Cancel to abort."
-        OKButton   76, 192, 80, 20
-        CancelButton 176, 192, 80, 20
+        Text       12, 64, 306, 12, dofLine
+        GroupBox   12, 82, 306, 96, "Thermal expansion (optional)"
+        CheckBox   22, 98, 290, 12, "Apply CTE (thermal expansion coeff) to RBE2s", .chkCTE
+        OptionGroup .cteSource
+            OptionButton 22, 118, 96, 12, "From material:"
+            OptionButton 22, 146, 96, 12, "Enter value:"
+        DropListBox 120, 116, 188, 60, matNames(), .matPick
+        TextBox     120, 144, 90, 12, .cteVal
+        Text       12, 190, 306, 12, "Click OK to create the spiders, Cancel to abort."
+        OKButton   76, 222, 80, 20
+        CancelButton 176, 222, 80, 20
     End Dialog
 
     Dim dlg As HoleDlg
-    dlg.cteVal  = "0.0"
-    dlg.chkCTE  = 0
-    dlg.chkGroup = 0
+    dlg.cteVal    = "0.0"
+    dlg.chkCTE    = 0
+    dlg.cteSource = 0          ' 0 = from material, 1 = enter value
+    dlg.matPick   = 0
+    If matCount = 0 Then dlg.cteSource = 1
 
     If Dialog(dlg) <> -1 Then
         App.feAppMessage(FCM_WARNING, "Cancelled by user - no changes made")
@@ -232,23 +285,38 @@ Sub Main
 
     Dim applyCTE As Boolean
     Dim cteValue As Double
+    Dim cteNote As String
     applyCTE = (dlg.chkCTE <> 0)
     cteValue = 0.0
-    If applyCTE Then cteValue = CDbl(dlg.cteVal)
-
-    Dim doGroup As Boolean
-    doGroup = (dlg.chkGroup <> 0)
+    cteNote  = ""
+    If applyCTE Then
+        If dlg.cteSource = 0 Then
+            ' From material
+            If matCount > 0 Then
+                rc = mtl.Get(matIDs(dlg.matPick))
+                If rc = FE_OK Then
+                    cteValue = mtl.mval(36)
+                    cteNote  = " (material " + matNames(dlg.matPick) + ")"
+                Else
+                    App.feAppMessage(FCM_WARNING, "Could not read selected material - CTE not applied")
+                    applyCTE = False
+                End If
+            Else
+                App.feAppMessage(FCM_WARNING, "No materials in model - CTE not applied")
+                applyCTE = False
+            End If
+        Else
+            ' Manual value
+            cteValue = CDbl(dlg.cteVal)
+            cteNote  = " (entered)"
+        End If
+    End If
 
     ' ============================================================
     ' Section 6: Create one RBE2 spider per hole
     ' ============================================================
     Dim nd As femap.Node
     Set nd = App.feNode
-
-    Dim createdNodeSet As femap.Set
-    Set createdNodeSet = App.feSet
-    Dim createdElemSet As femap.Set
-    Set createdElemSet = App.feSet
 
     Dim spiderCount As Long
     spiderCount = 0
@@ -292,9 +360,7 @@ Sub Main
             If rc <> FE_OK Then
                 App.feAppMessage(FCM_ERROR, "Hole " + Trim$(Str$(h + 1)) + ": failed to create center node")
             Else
-                createdNodeSet.Add(centerID)
-
-                ' Dependent-node arrays (all 6 DOF coupled)
+                ' Dependent-node arrays (DOF per mode: 123 solid / 123456 shell)
                 Dim vFaces As Variant, vWeights As Variant, vDOF As Variant
                 ReDim vFaces(nDep - 1)
                 ReDim vWeights(nDep - 1)
@@ -303,7 +369,7 @@ Sub Main
                     vFaces(k)   = CLng(0)
                     vWeights(k) = CDbl(0)
                     For d = 0 To 5
-                        vDOF(k * 6 + d) = CLng(1)
+                        vDOF(k * 6 + d) = CLng(depDOF(d))
                     Next d
                 Next k
 
@@ -328,7 +394,6 @@ Sub Main
                     If rc <> FE_OK Then
                         App.feAppMessage(FCM_ERROR, "Hole " + Trim$(Str$(h + 1)) + ": failed to save RBE2")
                     Else
-                        createdElemSet.Add(elemID)
                         spiderCount = spiderCount + 1
                         App.feAppMessage(FCM_NORMAL, "Hole " + Trim$(Str$(h + 1)) _
                             + ": RBE2 " + Trim$(Str$(elemID)) _
@@ -343,26 +408,7 @@ Sub Main
     App.feAppUnlock
 
     ' ============================================================
-    ' Section 7: Optional group of created entities
-    ' ============================================================
-    If doGroup And spiderCount > 0 Then
-        Dim gp As femap.Group
-        Set gp = App.feGroup
-        Dim grpID As Long
-        grpID = gp.NextEmptyID
-        gp.title = "RBE2 Hole Spiders"
-        rc = gp.Put(grpID)
-        If rc = FE_OK Then
-            gp.SetAdd(FT_NODE, createdNodeSet.ID)
-            gp.SetAdd(FT_ELEM, createdElemSet.ID)
-            App.feAppMessage(FCM_NORMAL, "Created group " + Trim$(Str$(grpID)) + " 'RBE2 Hole Spiders'")
-        Else
-            App.feAppMessage(FCM_WARNING, "Could not create the results group")
-        End If
-    End If
-
-    ' ============================================================
-    ' Section 8: Report
+    ' Section 7: Report
     ' ============================================================
     App.feViewRegenerate(0)
 
@@ -372,11 +418,12 @@ Sub Main
     App.feAppMessage(FCM_NORMAL, "  Geometry selected:     " + Str$(nGeom) + " " + geomWord + "(s)")
     App.feAppMessage(FCM_NORMAL, "  Holes identified:      " + Str$(nHoles))
     App.feAppMessage(FCM_NORMAL, "  RBE2 spiders created:  " + Str$(spiderCount))
+    App.feAppMessage(FCM_NORMAL, "  Dependent DOF:         " + dofStr)
     If emptyHoles > 0 Then
         App.feAppMessage(FCM_WARNING, "  Holes skipped (no nodes): " + Str$(emptyHoles))
     End If
     If applyCTE Then
-        App.feAppMessage(FCM_NORMAL, "  CTE applied to RBE2s:  " + Str$(cteValue))
+        App.feAppMessage(FCM_NORMAL, "  CTE applied to RBE2s:  " + Str$(cteValue) + cteNote)
     End If
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
 End Sub
