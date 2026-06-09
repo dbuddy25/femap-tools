@@ -39,7 +39,7 @@ Select a set of clearance-hole (bolt-hole) **surfaces** (solid bore) or **curves
 
 **Use case:** Quickly spider a whole bolt pattern for fastener modeling — pick the hole surfaces (solids) or hole-edge curves (shells), get clean RBE2s without manually finding nodes or creating center nodes one at a time.
 
-### connect-rbe2-cbush
+### Connect Groups by CBUSH
 Create CBUSH fastener elements between two parts (groups). Matches RBE2s whose independent (center) nodes are near each other across the two groups, draws a temporary visual preview of the proposed connections with gap-distance labels for verification, then builds one CBUSH per chosen location between the two center nodes. Supports two PBUSH types in one joint (e.g. fasteners + shear pins) via per-type rounds — pick a PBUSH property, select its locations, repeat — and applies one chosen orientation coordinate system to every CBUSH (`SetSpringOrient` with `FESO_ELCID`, valid for zero-length CBUSH). Results (CBUSH elements + PBUSH properties + orientation CSys) go into a new named group or an existing one.
 
 **Use case:** Fasten two meshed parts at their bolt-hole spiders without hand-building each CBUSH — verify the auto-matched locations visually, then drop in fasteners and shear pins with the right properties and orientation in one pass.

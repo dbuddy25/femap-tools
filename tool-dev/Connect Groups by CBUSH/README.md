@@ -1,6 +1,8 @@
-# connect-rbe2-cbush
+# Connect Groups by CBUSH
 
-**Status:** Built — pending in-Femap testing.
+*(file: `Connect Groups by CBUSH.bas`)*
+
+**Status:** Built and working.
 
 Custom tool to create **CBUSH fastener elements between two parts**. Each part is a
 group containing RBE2 bolt-hole spiders (e.g. from `make-rbe2-from-holes`). The tool
