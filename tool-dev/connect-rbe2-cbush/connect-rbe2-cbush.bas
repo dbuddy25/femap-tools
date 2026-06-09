@@ -348,7 +348,7 @@ Sub Main
             + Trim$(Str$(cG2Elem(p))) + " (G2)   gap=" + Format$(cGap(p), "0.####"))
     Next p
 
-    App.feViewShow2(FT_ELEM, matchSet.ID, True)
+    App.feViewShow2(FT_ELEM, matchSet.ID, False)   ' isolate matches, keep current zoom
 
     Dim pickSet As femap.Set
     Set pickSet = App.feSet
