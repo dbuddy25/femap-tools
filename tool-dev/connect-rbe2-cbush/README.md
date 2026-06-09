@@ -10,25 +10,28 @@ CBUSH per chosen location between the two center nodes.
 
 ## How it works
 
-1. **Pick two groups** (Part A, Part B). Each group's elements are scanned for RBE2s
-   (`type = FET_L_RIGID`, `topology = FTO_RIGIDLIST`); the independent node
-   (`el.node(0)`) and its global coordinates are recorded.
-2. **Match** — enter a max-gap tolerance. Each group-1 RBE2 is matched to the nearest
-   *unused* group-2 RBE2 within tolerance (greedy, 1-to-1). Each match is a candidate
-   connection with a gap = center-node distance.
-3. **Visual check with numbers** — a numbered list of candidate pairs (with RBE2 IDs
-   and gap distances) is printed to the messages window, and the view is **isolated to
-   the matched RBE2s** (`feViewShow2`) so the user can see exactly which spiders will
-   be connected. (Connection lines aren't used: bolt center nodes are typically
-   coincident, so a line would be zero-length/invisible.) Full element visibility is
-   restored at the end.
-4. **Pick one orientation coordinate system** applied to every CBUSH.
-5. **Per-type rounds** — for each connection type the user picks a **PBUSH property**
-   then graphically selects which group-1 RBE2s get it; a CBUSH is created for each.
-   Repeat for the next type (fasteners, then shear pins, …) until done. This is how
-   two PBUSH types live in one joint.
-6. **Output group** — a new named group, or append to an existing group. It receives
-   the CBUSH elements, the PBUSH property/properties used, and the orientation CSys.
+1. **One settings window** — every global choice is on a single dialog: **Group 1**,
+   **Group 2**, **max-gap tolerance**, **orientation CSys**, **PBUSH Type 1
+   (fasteners)**, **PBUSH Type 2 (shear pins**, with a "(none)" option for a
+   single-type joint**)**, and the **output group** ("(create new)" + a name box, or an
+   existing group). All lists are enumerated up front (groups, CSys incl. global 0,
+   PBUSH = property `type = 6`).
+2. **Match** — each group's elements are scanned for RBE2s (`type = FET_L_RIGID`,
+   `topology = FTO_RIGIDLIST`; center = `el.node(0)`). Each group-1 RBE2 is matched to
+   the nearest *unused* group-2 RBE2 within tolerance (greedy, 1-to-1). A numbered list
+   (RBE2 IDs + gap) prints to the messages window.
+3. **Visual check + assignment** — the matched RBE2s are **isolated in the view**
+   (`feViewShow2`) so the user sees the locations. Then:
+   - **Single PBUSH:** confirm → **all** matches connect with Type 1. No model picking.
+   - **Two PBUSH:** **one graphical pick** of the shear-pin locations (group-1 RBE2s);
+     those get Type 2, the rest get Type 1. Cancelling the picker = all fasteners.
+4. **Create + group** — one CBUSH per match (zero-length lines for coincident nodes),
+   the single orientation CSys applied to every element via `SetSpringOrient`. Full
+   element visibility is restored, and the output group is populated with the CBUSHes
+   + the PBUSH property/properties used + the orientation CSys.
+
+Net interactions: **one settings window + one confirm** (single type), plus **one
+model selection** only when a second property type is used.
 
 ### CBUSH creation
 
