@@ -132,7 +132,7 @@ Sub Main
     ' ============================================================
     ' Section 2: One settings window
     ' ============================================================
-    Begin Dialog SetupDlg 460, 252, "CBUSH Connect"
+    Begin Dialog SetupDlg 460, 252, "Connect Groups by CBUSH"
         Text        12, 12, 150, 12, "Group 1 (Part A):"
         DropListBox 168, 10, 280, 120, grpNames(), .g1Pick
         Text        12, 34, 150, 12, "Group 2 (Part B):"
@@ -357,7 +357,7 @@ Sub Main
         App.feViewShow2(FT_ELEM, matchSet.ID, False)   ' keep current zoom
         If MsgBox(Trim$(Str$(nCand)) + " matched pair(s) shown in the view." + Chr$(10) _
             + "Connect all with PBUSH " + Trim$(Str$(pb1ID)) + "?", _
-            vbOKCancel, "CBUSH Connect - Confirm") <> vbOK Then
+            vbOKCancel, "Connect Groups by CBUSH - Confirm") <> vbOK Then
             Dim allC As femap.Set
             Set allC = App.feSet
             allC.AddAll(FT_ELEM)
@@ -377,7 +377,7 @@ Sub Main
         MsgBox "Showing the group-1 RBE2s of the " + Trim$(Str$(nCand)) + " matched pair(s)." + Chr$(10) _
             + "Click OK, then SELECT the shear-pin locations." + Chr$(10) _
             + "Cancel in the picker = none are shear pins; the rest become fasteners.", _
-            vbOKOnly, "CBUSH Connect - Assign shear pins"
+            vbOKOnly, "Connect Groups by CBUSH - Assign shear pins"
         If pickSet.Select(FT_ELEM, True, "Select SHEAR-PIN RBE2 locations (group 1)") = FE_OK Then
             pickedID = pickSet.First()
             Do While pickedID > 0
@@ -478,7 +478,7 @@ Sub Main
     ' ============================================================
     App.feViewRegenerate(0)
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
-    App.feAppMessage(FCM_HIGHLIGHT, "  Connect RBE2 with CBUSH - Summary")
+    App.feAppMessage(FCM_HIGHLIGHT, "  Connect Groups by CBUSH - Summary")
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
     App.feAppMessage(FCM_NORMAL, "  Group 1 RBE2s:        " + Str$(n1))
     App.feAppMessage(FCM_NORMAL, "  Group 2 RBE2s:        " + Str$(n2))
