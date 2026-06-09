@@ -235,11 +235,13 @@ Sub Main
             + Trim$(Str$(cG2Elem(p))) + " (G2)   gap=" + Format$(cGap(p), "0.####"))
     Next p
 
-    ' Isolate the matched RBE2s in the active view so the user can verify them
+    ' Isolate the matched RBE2s and PAUSE so the user can actually review them.
+    ' (A modal pause holds the isolated view on screen; without it the script
+    '  races ahead and the isolation only flashes for a moment.)
     App.feViewShow2(FT_ELEM, matchSet.ID, True)
-    App.feViewRegenerate(0)
-    App.feAppMessage(FCM_NORMAL, "View now shows only the " + Trim$(Str$(nCand)) _
-        + " matched RBE2 pair(s). Verify, then pick the orientation CSys and per-type locations.")
+    MsgBox "The view now shows only the " + Trim$(Str$(nCand)) + " matched RBE2 pair(s)." _
+        + Chr$(10) + "Review the locations in the model, then click OK to continue.", _
+        vbOKOnly, "CBUSH Connect - Verify matches"
 
     ' ============================================================
     ' Section 5: Orientation CSys (one for all CBUSH)
