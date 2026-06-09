@@ -39,10 +39,10 @@ Sub Main
     ' Section 0: Choose geometry type (surfaces vs curves)
     ' ============================================================
     Begin Dialog ModeDlg 250, 120, "RBE2 from Holes - Geometry Type"
-        GroupBox 12, 10, 226, 64, "Hole geometry"
+        GroupBox 12, 10, 226, 64, "Hole Geometry"
         OptionGroup .geomType
-            OptionButton 22, 28, 200, 12, "Surfaces (solid bore)"
-            OptionButton 22, 48, 200, 12, "Curves (shell / plate hole edge)"
+            OptionButton 22, 28, 200, 12, "Surfaces (Solid Mesh)"
+            OptionButton 22, 48, 200, 12, "Curves (Plate Mesh)"
         OKButton     40, 90, 70, 20
         CancelButton 140, 90, 70, 20
     End Dialog
@@ -213,7 +213,7 @@ Sub Main
     Dim line1 As String, line2 As String, line3 As String, line4 As String
     line1 = "Geometry selected:  " + Trim$(Str$(nGeom)) + "  " + geomWord + "(s)"
     line2 = "Holes identified:   " + Trim$(Str$(nHoles)) + "  (grouped by shared points)"
-    line3 = "Total bore nodes:   " + Trim$(Str$(totalDep))
+    line3 = "Total nodes:        " + Trim$(Str$(totalDep))
     If emptyHoles > 0 Then
         line4 = "WARNING: " + Trim$(Str$(emptyHoles)) + " hole(s) have no mesh nodes - will be skipped."
     Else
@@ -260,7 +260,7 @@ Sub Main
         Text       12, 50, 306, 12, line4
         Text       12, 64, 306, 12, dofLine
         GroupBox   12, 82, 306, 96, "Thermal expansion (optional)"
-        CheckBox   22, 98, 290, 12, "Apply CTE (thermal expansion coeff) to RBE2s", .chkCTE
+        CheckBox   22, 98, 290, 12, "Apply CTE to RBE2s", .chkCTE
         OptionGroup .cteSource
             OptionButton 22, 118, 96, 12, "From material:"
             OptionButton 22, 146, 96, 12, "Enter value:"
