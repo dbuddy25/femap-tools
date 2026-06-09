@@ -437,7 +437,7 @@ Sub Main
     Dim projDone As Long, alongCnt As Long, orthoCnt As Long
     projDone = 0 : alongCnt = 0 : orthoCnt = 0
     If doProject And projN > 0 Then
-        Dim plBase(2) As Double, plNormal(2) As Double, plAxis(2) As Double
+        Dim plBase As Variant, plNormal As Variant, plAxis As Variant
         rc = App.fePlanePick("Select plane to project center nodes onto", plBase, plNormal, plAxis)
         If rc <> FE_OK Then
             App.feAppMessage(FCM_WARNING, "Plane selection cancelled - center nodes not projected")
