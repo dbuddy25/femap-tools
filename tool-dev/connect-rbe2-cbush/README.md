@@ -16,10 +16,12 @@ CBUSH per chosen location between the two center nodes.
 2. **Match** — enter a max-gap tolerance. Each group-1 RBE2 is matched to the nearest
    *unused* group-2 RBE2 within tolerance (greedy, 1-to-1). Each match is a candidate
    connection with a gap = center-node distance.
-3. **Visual check with numbers** — a temporary line is drawn between each matched
-   pair with a label `#n gap=<dist>`, and a numbered list is printed to the message
-   window. The user eyeballs the matches before committing; the temporary graphics
-   are removed at the end.
+3. **Visual check with numbers** — a numbered list of candidate pairs (with RBE2 IDs
+   and gap distances) is printed to the messages window, and the view is **isolated to
+   the matched RBE2s** (`feViewShow2`) so the user can see exactly which spiders will
+   be connected. (Connection lines aren't used: bolt center nodes are typically
+   coincident, so a line would be zero-length/invisible.) Full element visibility is
+   restored at the end.
 4. **Pick one orientation coordinate system** applied to every CBUSH.
 5. **Per-type rounds** — for each connection type the user picks a **PBUSH property**
    then graphically selects which group-1 RBE2s get it; a CBUSH is created for each.
@@ -55,7 +57,7 @@ created element.
 | CBUSH | `FET_L_SPRING` (6) / `FTO_LINE2` (0), `node(0)/node(1)`, `propID` |
 | CBUSH orientation | `el.SetSpringOrient(3, csysID, 0,0,0)` (alt: `SpringNoOrient=False : SpringUseCID=True : SpringCID=csysID`) |
 | PBUSH identify | Prop `type = 6` with `cbush = 1` |
-| Temp preview | `feGFXLine.PutAll(id, x1,y1,z1, x2,y2,z2, layer, color)`; delete via `gfxLine.DeleteAll(False, setID)`. `feText` labels; delete via `feDelete(FT_TEXT, setID)` |
+| Verify visually | `feViewShow2(FT_ELEM, setID, autoscale)` isolates the matched RBE2s; restore with `feViewShow2(FT_ELEM, allElemsSet, False)` (a Set `AddAll(FT_ELEM)`) |
 | Group contents | `gp.SetAdd(FT_ELEM / FT_PROP / FT_CSYS, setID)` (a group can hold all three) |
 
 ## Notes / assumptions

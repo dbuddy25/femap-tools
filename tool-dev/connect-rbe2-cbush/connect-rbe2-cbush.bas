@@ -20,7 +20,9 @@
 '           el.propID, then el.Put. Orientation: el.SetSpringOrient(3, csysID, 0,0,0)
 '           where 3 = FESO_ELCID (orient by coordinate system on the element).
 '   RBE2:   el.type=FET_L_RIGID And el.topology=FTO_RIGIDLIST; center = el.node(0).
-'   Preview: feGFXLine (temp lines) + feText (labels), removed before finishing.
+'   Preview: numbered list in the messages window + feViewShow2 isolates the
+'           matched RBE2s in the view (reliable for coincident nodes); the view is
+'           restored to all elements at the end.
 '
 ' Note: if SetSpringOrient errors on a given Femap build, the equivalent is
 '   cb.SpringNoOrient=False : cb.SpringUseCID=True : cb.SpringCID=csysID
@@ -217,50 +219,27 @@ Sub Main
     End If
 
     ' ============================================================
-    ' Section 4: Visual preview (temp lines + labels) + numbered list
+    ' Section 4: Numbered list + isolate the matched RBE2s for verification
+    ' (lines/labels are unreliable for coincident nodes; "Show Entities"
+    '  always renders, so isolate the matched RBE2s instead.)
     ' ============================================================
-    Dim gfx As Object
-    Set gfx = App.feGFXLine
-    Dim tx As Object
-    Set tx = App.feText
-
-    Dim lineIdSet As femap.Set
-    Set lineIdSet = App.feSet
-    Dim textIdSet As femap.Set
-    Set textIdSet = App.feSet
-
-    Dim ax As Double, ay As Double, az As Double
-    Dim bx As Double, by As Double, bz As Double
-    Dim lid As Long, tid As Long
+    Dim matchSet As femap.Set
+    Set matchSet = App.feSet
 
     App.feAppMessage(FCM_HIGHLIGHT, "=== Candidate connections (gap = center-node distance) ===")
     For p = 0 To nCand - 1
-        rc = nd.Get(cG1Node(p)) : ax = nd.x : ay = nd.y : az = nd.z
-        rc = nd.Get(cG2Node(p)) : bx = nd.x : by = nd.y : bz = nd.z
-
-        lid = gfx.NextEmptyID
-        gfx.PutAll(lid, ax, ay, az, bx, by, bz, 1, 124)
-        lineIdSet.Add(lid)
-
-        tid = tx.NextEmptyID
-        tx.ModelPosition = True
-        tx.AllViews = True
-        tx.DrawPointer = False
-        tx.DrawBorder = False
-        tx.color = 4
-        tx.layer = 1
-        tx.TextPosition(0) = (ax + bx) / 2.0
-        tx.TextPosition(1) = (ay + by) / 2.0
-        tx.TextPosition(2) = (az + bz) / 2.0
-        tx.text = "#" + Trim$(Str$(p + 1)) + " gap=" + Format$(cGap(p), "0.####")
-        tx.Put(tid)
-        textIdSet.Add(tid)
-
+        matchSet.Add(cG1Elem(p))
+        matchSet.Add(cG2Elem(p))
         App.feAppMessage(FCM_NORMAL, "  #" + Trim$(Str$(p + 1)) _
             + ": RBE2 " + Trim$(Str$(cG1Elem(p))) + " (G1)  <->  RBE2 " _
             + Trim$(Str$(cG2Elem(p))) + " (G2)   gap=" + Format$(cGap(p), "0.####"))
     Next p
+
+    ' Isolate the matched RBE2s in the active view so the user can verify them
+    App.feViewShow2(FT_ELEM, matchSet.ID, True)
     App.feViewRegenerate(0)
+    App.feAppMessage(FCM_NORMAL, "View now shows only the " + Trim$(Str$(nCand)) _
+        + " matched RBE2 pair(s). Verify, then pick the orientation CSys and per-type locations.")
 
     ' ============================================================
     ' Section 5: Orientation CSys (one for all CBUSH)
@@ -269,8 +248,10 @@ Sub Main
     Set csSet = App.feSet
     rc = csSet.Select(FT_CSYS, True, "Select ORIENTATION coordinate system for all CBUSH")
     If rc <> FE_OK Then
-        gfx.DeleteAll(False, lineIdSet.ID)
-        App.feDelete(FT_TEXT, textIdSet.ID)
+        Dim allE1 As femap.Set
+        Set allE1 = App.feSet
+        allE1.AddAll(FT_ELEM)
+        App.feViewShow2(FT_ELEM, allE1.ID, False)
         App.feViewRegenerate(0)
         App.feAppMessage(FCM_WARNING, "Cancelled - no connections made")
         Exit Sub
@@ -366,13 +347,15 @@ Sub Main
     Loop
 
     ' ============================================================
-    ' Section 7: Remove the preview graphics
+    ' Section 7: Restore full element visibility (shows the new CBUSHes too)
     ' ============================================================
-    gfx.DeleteAll(False, lineIdSet.ID)
-    App.feDelete(FT_TEXT, textIdSet.ID)
+    Dim allE2 As femap.Set
+    Set allE2 = App.feSet
+    allE2.AddAll(FT_ELEM)
+    App.feViewShow2(FT_ELEM, allE2.ID, False)
+    App.feViewRegenerate(0)
 
     If totalMade = 0 Then
-        App.feViewRegenerate(0)
         App.feAppMessage(FCM_WARNING, "No CBUSH elements were created")
         Exit Sub
     End If
