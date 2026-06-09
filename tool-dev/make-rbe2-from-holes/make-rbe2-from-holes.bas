@@ -20,6 +20,10 @@
 ' Options (single confirm dialog before anything is written to the model):
 '   - apply a thermal expansion coefficient (CTE) to the created RBE2s: either pick
 '     a model material (uses its thermal-expansion coeff) or enter a value.
+'   - project the new center nodes onto a user-picked plane (fePlanePick) after
+'     creation. Each node moves ALONG ITS HOLE AXIS to the plane so it stays centered
+'     on the hole for any plane tilt (axis from ArcCircleInfo / feVectorAxisOfSurface;
+'     orthogonal projection is used as a fallback if a hole's axis can't be read).
 '
 ' Assumptions / limits (v1):
 '   - Select ONLY hole surfaces (or curves) of one geometry type per run. Entities
@@ -253,7 +257,7 @@ Sub Main
         matNames(0) = "(no materials in model)"
     End If
 
-    Begin Dialog HoleDlg 330, 252, "Create RBE2 Spiders from Holes"
+    Begin Dialog HoleDlg 330, 268, "Create RBE2 Spiders from Holes"
         Text       12, 8,  306, 12, line1
         Text       12, 22, 306, 12, line2
         Text       12, 36, 306, 12, line3
@@ -266,22 +270,27 @@ Sub Main
             OptionButton 22, 146, 96, 12, "Enter value:"
         DropListBox 120, 116, 188, 60, matNames(), .matPick
         TextBox     120, 144, 90, 12, .cteVal
-        Text       12, 190, 306, 12, "Click OK to create the spiders, Cancel to abort."
-        OKButton   76, 222, 80, 20
-        CancelButton 176, 222, 80, 20
+        CheckBox   12, 184, 306, 12, "Project center nodes onto a plane (after creation)", .chkProject
+        Text       12, 206, 306, 12, "Click OK to create the spiders, Cancel to abort."
+        OKButton   76, 238, 80, 20
+        CancelButton 176, 238, 80, 20
     End Dialog
 
     Dim dlg As HoleDlg
-    dlg.cteVal    = "0.0"
-    dlg.chkCTE    = 0
-    dlg.cteSource = 0          ' 0 = from material, 1 = enter value
-    dlg.matPick   = 0
+    dlg.cteVal     = "0.0"
+    dlg.chkCTE     = 0
+    dlg.cteSource  = 0          ' 0 = from material, 1 = enter value
+    dlg.matPick    = 0
+    dlg.chkProject = 0
     If matCount = 0 Then dlg.cteSource = 1
 
     If Dialog(dlg) <> -1 Then
         App.feAppMessage(FCM_WARNING, "Cancelled by user - no changes made")
         Exit Sub
     End If
+
+    Dim doProject As Boolean
+    doProject = (dlg.chkProject <> 0)
 
     Dim applyCTE As Boolean
     Dim cteValue As Double
@@ -321,14 +330,24 @@ Sub Main
     Dim spiderCount As Long
     spiderCount = 0
 
+    ' Parallel arrays of created center nodes + a representative hole geometry ID
+    ' (any piece of a hole is coaxial) for optional plane projection later.
+    Dim projCenterID() As Long, projGeomID() As Long, projN As Long
+    ReDim projCenterID(nHoles - 1)
+    ReDim projGeomID(nHoles - 1)
+    projN = 0
+
     App.feAppLock
 
     For h = 0 To nHoles - 1
         ' Gather this hole's bore nodes
+        Dim repGeom As Long
+        repGeom = -1
         nodeSet.Clear()
         For i = 0 To nGeom - 1
             If FindRoot(parent, i) = holeRoot(h) Then
                 nodeSet.AddRule(geomIDs(i), nodeRule)
+                If repGeom < 0 Then repGeom = geomIDs(i)
             End If
         Next i
 
@@ -395,6 +414,9 @@ Sub Main
                         App.feAppMessage(FCM_ERROR, "Hole " + Trim$(Str$(h + 1)) + ": failed to save RBE2")
                     Else
                         spiderCount = spiderCount + 1
+                        projCenterID(projN) = centerID
+                        projGeomID(projN)   = repGeom
+                        projN = projN + 1
                         App.feAppMessage(FCM_NORMAL, "Hole " + Trim$(Str$(h + 1)) _
                             + ": RBE2 " + Trim$(Str$(elemID)) _
                             + ", center node " + Trim$(Str$(centerID)) _
@@ -408,7 +430,86 @@ Sub Main
     App.feAppUnlock
 
     ' ============================================================
-    ' Section 7: Report
+    ' Section 7: Project center nodes onto a user-selected plane
+    ' Each node moves ALONG ITS HOLE AXIS to the plane (stays centered).
+    ' Falls back to orthogonal projection if a hole's axis can't be read.
+    ' ============================================================
+    Dim projDone As Long, alongCnt As Long, orthoCnt As Long
+    projDone = 0 : alongCnt = 0 : orthoCnt = 0
+    If doProject And projN > 0 Then
+        Dim plBase(2) As Double, plNormal(2) As Double, plAxis(2) As Double
+        rc = App.fePlanePick("Select plane to project center nodes onto", plBase, plNormal, plAxis)
+        If rc <> FE_OK Then
+            App.feAppMessage(FCM_WARNING, "Plane selection cancelled - center nodes not projected")
+        Else
+            Dim nLen2 As Double
+            nLen2 = plNormal(0) * plNormal(0) + plNormal(1) * plNormal(1) + plNormal(2) * plNormal(2)
+            If nLen2 <= 0.0 Then nLen2 = 1.0     ' guard against a degenerate normal
+
+            Dim cv As femap.Curve
+            Set cv = App.feCurve
+
+            Dim p As Long
+            Dim Cx As Double, Cy As Double, Cz As Double
+            Dim ax As Double, ay As Double, az As Double, axisOK As Boolean
+            Dim aCtr As Variant, aNrm As Variant, aSp As Variant, aEp As Variant, aAng As Double, aRad As Double
+            Dim sBase As Variant, sDir As Variant
+            Dim denom As Double, tnum As Double, tt As Double, dphi As Double
+            Dim Nx As Double, Ny As Double, Nz As Double
+
+            Nx = plNormal(0) : Ny = plNormal(1) : Nz = plNormal(2)
+
+            App.feAppLock
+            For p = 0 To projN - 1
+                If nd.Get(projCenterID(p)) = FE_OK Then
+                    Cx = nd.x : Cy = nd.y : Cz = nd.z
+
+                    ' --- hole axis a for this node's geometry ---
+                    axisOK = False
+                    ax = 0.0 : ay = 0.0 : az = 0.0
+                    If mdlg.geomType = 1 Then
+                        ' curve / arc: normal from ArcCircleInfo is the axis
+                        If cv.Get(projGeomID(p)) = FE_OK Then
+                            If cv.ArcCircleInfo(aCtr, aNrm, aSp, aEp, aAng, aRad) = FE_OK Then
+                                ax = CDbl(aNrm(0)) : ay = CDbl(aNrm(1)) : az = CDbl(aNrm(2))
+                                axisOK = True
+                            End If
+                        End If
+                    Else
+                        ' surface / cylinder: revolution vector is the axis
+                        If App.feVectorAxisOfSurface(projGeomID(p), sBase, sDir) = FE_OK Then
+                            ax = CDbl(sDir(0)) : ay = CDbl(sDir(1)) : az = CDbl(sDir(2))
+                            axisOK = True
+                        End If
+                    End If
+
+                    denom = ax * Nx + ay * Ny + az * Nz
+                    If axisOK And Abs(denom) > 0.00000001 Then
+                        ' along-axis: intersect the hole centerline with the plane
+                        tnum = (plBase(0) - Cx) * Nx + (plBase(1) - Cy) * Ny + (plBase(2) - Cz) * Nz
+                        tt = tnum / denom
+                        nd.x = Cx + tt * ax
+                        nd.y = Cy + tt * ay
+                        nd.z = Cz + tt * az
+                        alongCnt = alongCnt + 1
+                    Else
+                        ' orthogonal fallback: drop perpendicular onto the plane
+                        dphi = ((Cx - plBase(0)) * Nx + (Cy - plBase(1)) * Ny + (Cz - plBase(2)) * Nz) / nLen2
+                        nd.x = Cx - dphi * Nx
+                        nd.y = Cy - dphi * Ny
+                        nd.z = Cz - dphi * Nz
+                        orthoCnt = orthoCnt + 1
+                    End If
+                    nd.Put(projCenterID(p))
+                    projDone = projDone + 1
+                End If
+            Next p
+            App.feAppUnlock
+        End If
+    End If
+
+    ' ============================================================
+    ' Section 8: Report
     ' ============================================================
     App.feViewRegenerate(0)
 
@@ -424,6 +525,14 @@ Sub Main
     End If
     If applyCTE Then
         App.feAppMessage(FCM_NORMAL, "  CTE applied to RBE2s:  " + Str$(cteValue) + cteNote)
+    End If
+    If doProject Then
+        App.feAppMessage(FCM_NORMAL, "  Center nodes projected:" + Str$(projDone) _
+            + "  (along-axis " + Trim$(Str$(alongCnt)) + ", orthogonal " + Trim$(Str$(orthoCnt)) + ")")
+        If orthoCnt > 0 Then
+            App.feAppMessage(FCM_WARNING, "  " + Trim$(Str$(orthoCnt)) _
+                + " node(s) used orthogonal projection (hole axis unreadable or parallel to plane)")
+        End If
     End If
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
 End Sub
