@@ -348,15 +348,14 @@ Sub Main
             + Trim$(Str$(cG2Elem(p))) + " (G2)   gap=" + Format$(cGap(p), "0.####"))
     Next p
 
-    App.feViewShow2(FT_ELEM, matchSet.ID, False)   ' isolate matches, keep current zoom
-
     Dim pickSet As femap.Set
     Set pickSet = App.feSet
     Dim pickedID As Long, ci As Long
 
     If pb2ID < 0 Then
-        ' single type - confirm and connect ALL with pb1
-        If MsgBox(Trim$(Str$(nCand)) + " matched pair(s) isolated in the view." + Chr$(10) _
+        ' single type - show matched pairs, confirm, connect ALL with pb1
+        App.feViewShow2(FT_ELEM, matchSet.ID, False)   ' keep current zoom
+        If MsgBox(Trim$(Str$(nCand)) + " matched pair(s) shown in the view." + Chr$(10) _
             + "Connect all with PBUSH " + Trim$(Str$(pb1ID)) + "?", _
             vbOKCancel, "CBUSH Connect - Confirm") <> vbOK Then
             Dim allC As femap.Set
@@ -368,9 +367,15 @@ Sub Main
             Exit Sub
         End If
     Else
-        ' two types - one graphical pick of the shear-pin locations
-        MsgBox Trim$(Str$(nCand)) + " matched pair(s) isolated in the view." + Chr$(10) _
-            + "Click OK, then SELECT the shear-pin locations (group-1 RBE2s)." + Chr$(10) _
+        ' two types - show ONLY the group-1 matched RBE2s, then pick the shear pins
+        Dim g1MatchSet As femap.Set
+        Set g1MatchSet = App.feSet
+        For ci = 0 To nCand - 1
+            g1MatchSet.Add(cG1Elem(ci))
+        Next ci
+        App.feViewShow2(FT_ELEM, g1MatchSet.ID, False)   ' group-1 candidates only, keep zoom
+        MsgBox "Showing the group-1 RBE2s of the " + Trim$(Str$(nCand)) + " matched pair(s)." + Chr$(10) _
+            + "Click OK, then SELECT the shear-pin locations." + Chr$(10) _
             + "Cancel in the picker = none are shear pins; the rest become fasteners.", _
             vbOKOnly, "CBUSH Connect - Assign shear pins"
         If pickSet.Select(FT_ELEM, True, "Select SHEAR-PIN RBE2 locations (group 1)") = FE_OK Then
