@@ -132,26 +132,26 @@ Sub Main
     ' ============================================================
     ' Section 2: One settings window
     ' ============================================================
-    Begin Dialog SetupDlg 344, 252, "CBUSH Connect"
+    Begin Dialog SetupDlg 460, 252, "CBUSH Connect"
         Text        12, 12, 150, 12, "Group 1 (Part A):"
-        DropListBox 168, 10, 164, 90, grpNames(), .g1Pick
+        DropListBox 168, 10, 280, 120, grpNames(), .g1Pick
         Text        12, 34, 150, 12, "Group 2 (Part B):"
-        DropListBox 168, 32, 164, 90, grpNames(), .g2Pick
+        DropListBox 168, 32, 280, 120, grpNames(), .g2Pick
         Text        12, 56, 150, 12, "Max gap tolerance:"
-        TextBox     168, 54, 90, 12, .tolBox
+        TextBox     168, 54, 110, 12, .tolBox
         Text        12, 78, 150, 12, "Orientation CSys (all CBUSH):"
-        DropListBox 168, 76, 164, 90, csNames(), .csPick
-        GroupBox    12, 100, 320, 56, "Fastener properties (PBUSH)"
+        DropListBox 168, 76, 280, 120, csNames(), .csPick
+        GroupBox    12, 100, 436, 56, "Fastener properties (PBUSH)"
         Text        22, 118, 124, 12, "Type 1 (fasteners):"
-        DropListBox 150, 116, 176, 90, pbNames(), .pb1Pick
+        DropListBox 150, 116, 290, 120, pbNames(), .pb1Pick
         Text        22, 136, 124, 12, "Type 2 (shear pins):"
-        DropListBox 150, 134, 176, 90, pb2Names(), .pb2Pick
+        DropListBox 150, 134, 290, 120, pb2Names(), .pb2Pick
         Text        12, 164, 150, 12, "Output group:"
-        DropListBox 168, 162, 164, 90, outNames(), .outPick
+        DropListBox 168, 162, 280, 120, outNames(), .outPick
         Text        12, 186, 150, 12, "New group name (if new):"
-        TextBox     168, 184, 164, 12, .nameBox
-        OKButton    92, 216, 80, 20
-        CancelButton 192, 216, 80, 20
+        TextBox     168, 184, 280, 12, .nameBox
+        OKButton    140, 216, 80, 20
+        CancelButton 240, 216, 80, 20
     End Dialog
 
     Dim sdlg As SetupDlg
