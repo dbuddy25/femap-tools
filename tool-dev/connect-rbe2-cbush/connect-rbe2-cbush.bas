@@ -377,7 +377,6 @@ Sub Main
         If Trim$(gname) = "" Then gname = "CBUSH Connections"
         outID = gpOut.NextEmptyID
         gpOut.title = gname
-        gpOut.Put(outID)
     Else
         rc = grpSet.Select(FT_GROUP, True, "Select existing group to add connections to")
         If rc <> FE_OK Then
@@ -392,9 +391,13 @@ Sub Main
         Dim csOneSet As femap.Set
         Set csOneSet = App.feSet
         csOneSet.Add(csysID)
+        ' SetAdd builds selection RULES on the in-memory group; Put commits them
+        ' (and triggers evaluation). Order matters: SetAdd FIRST, then Put.
         gpOut.SetAdd(FT_ELEM, createdElemSet.ID)
         gpOut.SetAdd(FT_PROP, usedPropSet.ID)
         gpOut.SetAdd(FT_CSYS, csOneSet.ID)
+        gpOut.Put(outID)
+        App.feGroupEvaluate(-outID, True)     ' force the rules to materialize now
         App.feAppMessage(FCM_NORMAL, "Connections added to group " + Trim$(Str$(outID)))
     End If
 

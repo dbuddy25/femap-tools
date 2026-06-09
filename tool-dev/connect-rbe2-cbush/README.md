@@ -58,7 +58,7 @@ created element.
 | CBUSH orientation | `el.SetSpringOrient(3, csysID, 0,0,0)` (alt: `SpringNoOrient=False : SpringUseCID=True : SpringCID=csysID`) |
 | PBUSH identify | Prop `type = 6` with `cbush = 1` |
 | Verify visually | `feViewShow2(FT_ELEM, setID, autoscale)` isolates the matched RBE2s; restore with `feViewShow2(FT_ELEM, allElemsSet, False)` (a Set `AddAll(FT_ELEM)`) |
-| Group contents | `gp.SetAdd(FT_ELEM / FT_PROP / FT_CSYS, setID)` (a group can hold all three) |
+| Group contents | `gp.SetAdd(FT_ELEM / FT_PROP / FT_CSYS, setID)` **before** `gp.Put(id)` (SetAdd builds rules; Put commits), then `feGroupEvaluate(-id, True)` to materialize. A group can hold all three types. |
 
 ## Notes / assumptions
 
