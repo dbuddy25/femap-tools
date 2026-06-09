@@ -450,7 +450,7 @@ Sub Main
             Set cv = App.feCurve
 
             Dim p As Long
-            Dim Cx As Double, Cy As Double, Cz As Double
+            Dim pcx As Double, pcy As Double, pcz As Double
             Dim ax As Double, ay As Double, az As Double, axisOK As Boolean
             Dim aCtr As Variant, aNrm As Variant, aSp As Variant, aEp As Variant, aAng As Double, aRad As Double
             Dim sBase As Variant, sDir As Variant
@@ -462,7 +462,7 @@ Sub Main
             App.feAppLock
             For p = 0 To projN - 1
                 If nd.Get(projCenterID(p)) = FE_OK Then
-                    Cx = nd.x : Cy = nd.y : Cz = nd.z
+                    pcx = nd.x : pcy = nd.y : pcz = nd.z
 
                     ' --- hole axis a for this node's geometry ---
                     axisOK = False
@@ -486,18 +486,18 @@ Sub Main
                     denom = ax * Nx + ay * Ny + az * Nz
                     If axisOK And Abs(denom) > 0.00000001 Then
                         ' along-axis: intersect the hole centerline with the plane
-                        tnum = (plBase(0) - Cx) * Nx + (plBase(1) - Cy) * Ny + (plBase(2) - Cz) * Nz
+                        tnum = (plBase(0) - pcx) * Nx + (plBase(1) - pcy) * Ny + (plBase(2) - pcz) * Nz
                         tt = tnum / denom
-                        nd.x = Cx + tt * ax
-                        nd.y = Cy + tt * ay
-                        nd.z = Cz + tt * az
+                        nd.x = pcx + tt * ax
+                        nd.y = pcy + tt * ay
+                        nd.z = pcz + tt * az
                         alongCnt = alongCnt + 1
                     Else
                         ' orthogonal fallback: drop perpendicular onto the plane
-                        dphi = ((Cx - plBase(0)) * Nx + (Cy - plBase(1)) * Ny + (Cz - plBase(2)) * Nz) / nLen2
-                        nd.x = Cx - dphi * Nx
-                        nd.y = Cy - dphi * Ny
-                        nd.z = Cz - dphi * Nz
+                        dphi = ((pcx - plBase(0)) * Nx + (pcy - plBase(1)) * Ny + (pcz - plBase(2)) * Nz) / nLen2
+                        nd.x = pcx - dphi * Nx
+                        nd.y = pcy - dphi * Ny
+                        nd.z = pcz - dphi * Nz
                         orthoCnt = orthoCnt + 1
                     End If
                     nd.Put(projCenterID(p))
