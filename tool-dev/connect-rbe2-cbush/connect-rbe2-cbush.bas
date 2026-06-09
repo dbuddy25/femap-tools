@@ -148,7 +148,7 @@ Sub Main
         DropListBox 150, 134, 290, 120, pb2Names(), .pb2Pick
         Text        12, 164, 150, 12, "Output group:"
         DropListBox 168, 162, 280, 120, outNames(), .outPick
-        Text        12, 186, 150, 12, "New group name (if new):"
+        Text        12, 186, 154, 12, "New group name:"
         TextBox     168, 184, 280, 12, .nameBox
         OKButton    140, 216, 80, 20
         CancelButton 240, 216, 80, 20
