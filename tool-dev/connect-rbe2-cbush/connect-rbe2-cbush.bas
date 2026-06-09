@@ -32,9 +32,12 @@ Sub Main
     Dim rc As Long
     Dim i As Long, j As Long, p As Long
 
-    Dim el As femap.Elem  : Set el = App.feElem
-    Dim nd As femap.Node  : Set nd = App.feNode
-    Dim gp As femap.Group : Set gp = App.feGroup
+    Dim el As femap.Elem
+    Set el = App.feElem
+    Dim nd As femap.Node
+    Set nd = App.feNode
+    Dim gp As femap.Group
+    Set gp = App.feGroup
 
     Dim eid As Long, indep As Long
 
@@ -85,8 +88,11 @@ Sub Main
 
     Dim g1Elem() As Long, g1Node() As Long
     Dim g1x() As Double, g1y() As Double, g1z() As Double
-    ReDim g1Elem(cap1 - 1) : ReDim g1Node(cap1 - 1)
-    ReDim g1x(cap1 - 1) : ReDim g1y(cap1 - 1) : ReDim g1z(cap1 - 1)
+    ReDim g1Elem(cap1 - 1)
+    ReDim g1Node(cap1 - 1)
+    ReDim g1x(cap1 - 1)
+    ReDim g1y(cap1 - 1)
+    ReDim g1z(cap1 - 1)
     Dim n1 As Long
     n1 = 0
     eid = es1.First()
@@ -125,8 +131,11 @@ Sub Main
 
     Dim g2Elem() As Long, g2Node() As Long
     Dim g2x() As Double, g2y() As Double, g2z() As Double
-    ReDim g2Elem(cap2 - 1) : ReDim g2Node(cap2 - 1)
-    ReDim g2x(cap2 - 1) : ReDim g2y(cap2 - 1) : ReDim g2z(cap2 - 1)
+    ReDim g2Elem(cap2 - 1)
+    ReDim g2Node(cap2 - 1)
+    ReDim g2x(cap2 - 1)
+    ReDim g2y(cap2 - 1)
+    ReDim g2z(cap2 - 1)
     Dim n2 As Long
     n2 = 0
     eid = es2.First()
@@ -169,9 +178,12 @@ Sub Main
 
     Dim cG1Elem() As Long, cG1Node() As Long, cG2Elem() As Long, cG2Node() As Long
     Dim cGap() As Double, cAssigned() As Boolean
-    ReDim cG1Elem(n1 - 1) : ReDim cG1Node(n1 - 1)
-    ReDim cG2Elem(n1 - 1) : ReDim cG2Node(n1 - 1)
-    ReDim cGap(n1 - 1) : ReDim cAssigned(n1 - 1)
+    ReDim cG1Elem(n1 - 1)
+    ReDim cG1Node(n1 - 1)
+    ReDim cG2Elem(n1 - 1)
+    ReDim cG2Node(n1 - 1)
+    ReDim cGap(n1 - 1)
+    ReDim cAssigned(n1 - 1)
     Dim nCand As Long
     nCand = 0
 
@@ -207,11 +219,15 @@ Sub Main
     ' ============================================================
     ' Section 4: Visual preview (temp lines + labels) + numbered list
     ' ============================================================
-    Dim gfx As Object : Set gfx = App.feGFXLine
-    Dim tx As Object  : Set tx = App.feText
+    Dim gfx As Object
+    Set gfx = App.feGFXLine
+    Dim tx As Object
+    Set tx = App.feText
 
-    Dim lineIdSet As femap.Set : Set lineIdSet = App.feSet
-    Dim textIdSet As femap.Set : Set textIdSet = App.feSet
+    Dim lineIdSet As femap.Set
+    Set lineIdSet = App.feSet
+    Dim textIdSet As femap.Set
+    Set textIdSet = App.feSet
 
     Dim ax As Double, ay As Double, az As Double
     Dim bx As Double, by As Double, bz As Double
@@ -265,13 +281,17 @@ Sub Main
     ' ============================================================
     ' Section 6: Per-type rounds - pick PBUSH, select locations, build CBUSH
     ' ============================================================
-    Dim createdElemSet As femap.Set : Set createdElemSet = App.feSet
-    Dim usedPropSet As femap.Set    : Set usedPropSet = App.feSet
+    Dim createdElemSet As femap.Set
+    Set createdElemSet = App.feSet
+    Dim usedPropSet As femap.Set
+    Set usedPropSet = App.feSet
 
-    Dim pr As Object : Set pr = App.feProp
+    Dim pr As Object
+    Set pr = App.feProp
     Dim cb As femap.Elem
 
-    Dim pickSet As femap.Set : Set pickSet = App.feSet
+    Dim pickSet As femap.Set
+    Set pickSet = App.feSet
 
     Dim totalMade As Long, roundNo As Long
     totalMade = 0 : roundNo = 0
@@ -360,7 +380,8 @@ Sub Main
     ' ============================================================
     ' Section 8: Output group (new or existing)
     ' ============================================================
-    Dim gpOut As femap.Group : Set gpOut = App.feGroup
+    Dim gpOut As femap.Group
+    Set gpOut = App.feGroup
     Dim outID As Long
     outID = -1
 
@@ -383,7 +404,8 @@ Sub Main
     End If
 
     If outID > 0 Then
-        Dim csOneSet As femap.Set : Set csOneSet = App.feSet
+        Dim csOneSet As femap.Set
+        Set csOneSet = App.feSet
         csOneSet.Add(csysID)
         gpOut.SetAdd(FT_ELEM, createdElemSet.ID)
         gpOut.SetAdd(FT_PROP, usedPropSet.ID)
