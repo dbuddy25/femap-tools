@@ -404,11 +404,14 @@ Sub Main
     pb1Used = False
     pb2Used = False
 
-    ' Temporarily disable Group Automatic Add so the created entities are not also
-    ' auto-added to the active group; restored right after creation.
-    Dim savedAutoAdd As Long
+    ' Temporarily suspend Group Automatic Add so the created entities are not also
+    ' auto-added to the active group. Two levers: turn the mode off AND clear the
+    ' active group (the auto-add target). Both restored right after creation.
+    Dim savedAutoAdd As Long, savedActiveGrp As Long
     savedAutoAdd = App.Info_GroupAutomaticAdd
+    savedActiveGrp = App.Info_ActiveID(FT_GROUP)
     App.Info_GroupAutomaticAdd = 0
+    App.Info_ActiveID(FT_GROUP) = 0
 
     App.feAppLock
     For p = 0 To nCand - 1
@@ -435,7 +438,8 @@ Sub Main
         End If
     Next p
     App.feAppUnlock
-    App.Info_GroupAutomaticAdd = savedAutoAdd   ' restore the user's setting
+    App.Info_ActiveID(FT_GROUP) = savedActiveGrp   ' restore the user's settings
+    App.Info_GroupAutomaticAdd = savedAutoAdd
 
     Dim usedPropSet As femap.Set
     Set usedPropSet = App.feSet
