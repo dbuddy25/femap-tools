@@ -404,14 +404,10 @@ Sub Main
     pb1Used = False
     pb2Used = False
 
-    ' Temporarily suspend Group Automatic Add so the created entities are not also
-    ' auto-added to the active group. Two levers: turn the mode off AND clear the
-    ' active group (the auto-add target). Both restored right after creation.
-    Dim savedAutoAdd As Long, savedActiveGrp As Long
-    savedAutoAdd = App.Info_GroupAutomaticAdd
-    savedActiveGrp = App.Info_ActiveID(FT_GROUP)
-    App.Info_GroupAutomaticAdd = 0
-    App.Info_ActiveID(FT_GROUP) = 0
+    ' Group Automatic Add can't be suspended via the API on this build, so capture
+    ' the active group now and strip the created entities out of it after grouping.
+    Dim activeGrpID As Long
+    activeGrpID = App.Info_ActiveID(FT_GROUP)
 
     App.feAppLock
     For p = 0 To nCand - 1
@@ -438,8 +434,6 @@ Sub Main
         End If
     Next p
     App.feAppUnlock
-    App.Info_ActiveID(FT_GROUP) = savedActiveGrp   ' restore the user's settings
-    App.Info_GroupAutomaticAdd = savedAutoAdd
 
     Dim usedPropSet As femap.Set
     Set usedPropSet = App.feSet
@@ -483,6 +477,17 @@ Sub Main
     gpOut.SetAdd(FT_CSYS, csOneSet.ID)
     gpOut.Put(outID)
     App.feGroupEvaluate(-outID, True)
+
+    ' If Group Automatic Add put the new CBUSHes in the active group, strip them out
+    ' (unless the active group is the chosen output group).
+    If activeGrpID > 0 And activeGrpID <> outID Then
+        Dim gAct As femap.Group
+        Set gAct = App.feGroup
+        gAct.Get(activeGrpID)
+        gAct.SetAddOpt(FT_ELEM, createdElemSet.ID, 0)
+        gAct.Put(activeGrpID)
+        App.feGroupEvaluate(-activeGrpID, True)
+    End If
 
     ' ============================================================
     ' Section 9: Report

@@ -402,14 +402,10 @@ Sub Main
     sumy = 0.0
     sumz = 0.0
 
-    ' Temporarily suspend Group Automatic Add so the created entities are not also
-    ' auto-added to the active group. Two levers: turn the mode off AND clear the
-    ' active group (the auto-add target). Both restored right after creation.
-    Dim savedAutoAdd As Long, savedActiveGrp As Long
-    savedAutoAdd = App.Info_GroupAutomaticAdd
-    savedActiveGrp = App.Info_ActiveID(FT_GROUP)
-    App.Info_GroupAutomaticAdd = 0
-    App.Info_ActiveID(FT_GROUP) = 0
+    ' Group Automatic Add can't be suspended via the API on this build, so capture
+    ' the active group now and strip the created entities out of it after grouping.
+    Dim activeGrpID As Long
+    activeGrpID = App.Info_ActiveID(FT_GROUP)
 
     App.feAppLock
     For p = 0 To nF - 1
@@ -498,8 +494,6 @@ Sub Main
     rc = cb2.PutNodeList(0, nF, vGi, vFaces, vWeights, vDOF)
     rc = cb2.Put(groundRBE2ID)
     App.feAppUnlock
-    App.Info_ActiveID(FT_GROUP) = savedActiveGrp   ' restore the user's settings
-    App.Info_GroupAutomaticAdd = savedAutoAdd
 
     ' ============================================================
     ' Section 7: Restore full element visibility
@@ -557,6 +551,22 @@ Sub Main
     gpG.SetAdd(FT_NODE, groundNodeSet.ID)
     gpG.Put(grGrpID)
     App.feGroupEvaluate(-grGrpID, True)
+
+    ' If Group Automatic Add put the new entities in the active group, strip them out
+    ' (unless the active group is one of the chosen output groups).
+    If activeGrpID > 0 And activeGrpID <> cbGrpID And activeGrpID <> grGrpID Then
+        Dim gAct As femap.Group
+        Set gAct = App.feGroup
+        gAct.Get(activeGrpID)
+        Dim allCreatedElem As femap.Set
+        Set allCreatedElem = App.feSet
+        allCreatedElem.AddSet(cbushSet.ID)
+        allCreatedElem.Add(groundRBE2ID)
+        gAct.SetAddOpt(FT_ELEM, allCreatedElem.ID, 0)
+        gAct.SetAddOpt(FT_NODE, groundNodeSet.ID, 0)
+        gAct.Put(activeGrpID)
+        App.feGroupEvaluate(-activeGrpID, True)
+    End If
 
     ' ============================================================
     ' Section 9: Report
