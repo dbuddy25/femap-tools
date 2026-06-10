@@ -402,6 +402,12 @@ Sub Main
     sumy = 0.0
     sumz = 0.0
 
+    ' Temporarily disable Group Automatic Add so the created entities are not also
+    ' auto-added to the active group; restored right after creation.
+    Dim savedAutoAdd As Long
+    savedAutoAdd = App.Info_GroupAutomaticAdd
+    App.Info_GroupAutomaticAdd = 0
+
     App.feAppLock
     For p = 0 To nF - 1
         ' new node Gi coincident with the center node Ci
@@ -489,6 +495,7 @@ Sub Main
     rc = cb2.PutNodeList(0, nF, vGi, vFaces, vWeights, vDOF)
     rc = cb2.Put(groundRBE2ID)
     App.feAppUnlock
+    App.Info_GroupAutomaticAdd = savedAutoAdd   ' restore the user's setting
 
     ' ============================================================
     ' Section 7: Restore full element visibility
