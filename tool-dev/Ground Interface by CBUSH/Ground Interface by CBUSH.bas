@@ -189,7 +189,7 @@ Sub Main
 
     Dim sdlg As SetupDlg
     sdlg.grpPick = 0
-    sdlg.tolBox = "1.0"
+    sdlg.tolBox = "0.01"
     sdlg.csPick = 0
     sdlg.pb1Pick = 0
     sdlg.pb2Pick = 0
