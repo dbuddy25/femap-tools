@@ -110,12 +110,21 @@ Sub Main
 
         ' Check what kind of line this is
         If Left$(Trim$(ln), 1) = "$" Then
-            ' Comment line - buffer it
-            If commentCount > UBound(commentBuf) Then
-                ReDim Preserve commentBuf(commentCount + 99)
+            ' Comment line
+            If inContact Then
+                ' Inside/trailing a contact card block - write directly so the
+                ' comment stays in place and is not lost when a non-contact card
+                ' follows (buffering would discard it).
+                Print #outFile, ln
+            Else
+                ' Leading comment - buffer until we see the next card: flushed
+                ' before a contact card, discarded before a non-contact card.
+                If commentCount > UBound(commentBuf) Then
+                    ReDim Preserve commentBuf(commentCount + 99)
+                End If
+                commentBuf(commentCount) = ln
+                commentCount = commentCount + 1
             End If
-            commentBuf(commentCount) = ln
-            commentCount = commentCount + 1
 
         ElseIf cardName = "" Or Left$(cardName, 1) = "+" Or Left$(cardName, 1) = "*" Then
             ' Continuation line - include if previous card was contact
