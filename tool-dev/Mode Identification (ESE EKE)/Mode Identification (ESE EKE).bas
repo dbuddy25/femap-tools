@@ -213,17 +213,18 @@ Sub Main
         wsD.Cells(rowD, 2).Value = os.title
         wsD.Cells(rowD, 3).Value = os.value
 
-        rbo.Clear()
-        rbo.DataNeeded(8, 0)                 ' 8 = elements, 0 = all
-        rbo.AddColumnV2(osetIDs(m), eseID, False, nAddedE, vIdxE)
-        rbo.AddColumnV2(osetIDs(m), ekeID, False, nAddedK, vIdxK)
-        rbo.Populate
-        eseCol = CLng(vIdxE(0))
-        ekeCol = CLng(vIdxK(0))
-
+        ' Populate PER GROUP (only that group's elements) so the per-group sum
+        ' can't be mis-attributed - matches the proven reference method.
         For g = 0 To nGroups - 1
             eset.Clear()
             eset.AddGroup(FT_ELEM, grpIDs(g))
+            rbo.Clear()
+            rbo.DataNeeded(8, eset.ID)           ' 8 = elements, limited to this group
+            rbo.AddColumnV2(osetIDs(m), eseID, False, nAddedE, vIdxE)
+            rbo.AddColumnV2(osetIDs(m), ekeID, False, nAddedK, vIdxK)
+            rbo.Populate
+            eseCol = CLng(vIdxE(0))
+            ekeCol = CLng(vIdxK(0))
             rbo.GetColumnSum(eseCol, eset.ID, nNumVal, eseSum, dSq)
             rbo.GetColumnSum(ekeCol, eset.ID, nNumVal, ekeSum, dSq)
             wsD.Cells(rowD, eseStart + g).Value = eseSum

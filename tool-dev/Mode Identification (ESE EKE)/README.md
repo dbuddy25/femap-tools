@@ -23,10 +23,11 @@ with `PARAM,TINY,1.-20` so every element reports energy.
 3. **Coverage check** — compares the union of the selected groups to all model
    elements and warns if elements are **uncovered** (totals < 100%) or the groups
    **overlap** (totals > 100%).
-4. **Build the matrix** — for each mode: `Populate` the Results browser **once** over
-   all elements, then `GetColumnSum(col, groupElemSet, …)` per group (the set-limit
-   argument restricts the sum to that group — much faster than re-populating per
-   group).
+4. **Build the matrix** — for each mode × group: `DataNeeded(8, groupElemSet)` (only
+   that group's elements), `AddColumnV2` for ESE% + EKE%, `Populate`, then
+   `GetColumnSum` over the group. Populating per group keeps the per-group
+   attribution exact (an earlier "populate all once + set-limit sum" shortcut
+   scrambled the per-group split while still totaling 100% — see Notes).
 5. **Excel** (late-bound, so it survives Office version changes): one `Energy by
    Group` sheet (ESE block + Total, gap, EKE block + Total; red/green data bars;
    vertical group-title headers) plus a `README` sheet logging the model, user, date,
@@ -58,4 +59,7 @@ columns → should read ~100.00 when the groups partition the model.
   never need hand-editing when the results/version change. (Tested: the lookup
   resolves to `80001`/`80104` and per-mode totals come out ~100%, confirming both are
   the percent vectors.)
-- `Populate` is once per mode (not per mode×group) — the speed fix.
+- Summation is **per group** (`DataNeeded` over the group, then `GetColumnSum`). A
+  faster "populate all elements once, then sum each group via `GetColumnSum`'s
+  set-limit" approach was tried first but mis-attributed energy across groups (group
+  values wrong, per-mode total still 100), so it was reverted to the per-group method.
