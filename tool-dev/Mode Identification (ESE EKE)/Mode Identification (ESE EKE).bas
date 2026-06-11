@@ -250,6 +250,9 @@ Sub Main
     ' vertical group-title headers
     wsD.Range(wsD.Cells(4, eseStart), wsD.Cells(4, eseStart + nGroups - 1)).Orientation = 90
     wsD.Range(wsD.Cells(4, ekeStart), wsD.Cells(4, ekeStart + nGroups - 1)).Orientation = 90
+    ' merge each block title across its columns (group columns + Total)
+    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(2, eseTotalCol)).Merge
+    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(2, ekeTotalCol)).Merge
     ' center + bold headers
     wsD.UsedRange.HorizontalAlignment = -4108        ' xlCenter
     wsD.Rows("1:4").Font.Bold = True
