@@ -213,18 +213,19 @@ Sub Main
         wsD.Cells(rowD, 2).Value = os.title
         wsD.Cells(rowD, 3).Value = os.value
 
-        ' Populate PER GROUP (only that group's elements) so the per-group sum
-        ' can't be mis-attributed - matches the proven reference method.
+        ' Populate ONCE over all elements, then sum each group via GetColumnSum's
+        ' set-limit (validated against the Femap Data Table - same numbers as the
+        ' per-group method, and faster).
+        rbo.Clear()
+        rbo.DataNeeded(8, 0)                      ' 8 = elements, 0 = all
+        rbo.AddColumnV2(osetIDs(m), eseID, False, nAddedE, vIdxE)
+        rbo.AddColumnV2(osetIDs(m), ekeID, False, nAddedK, vIdxK)
+        rbo.Populate
+        eseCol = CLng(vIdxE(0))
+        ekeCol = CLng(vIdxK(0))
         For g = 0 To nGroups - 1
             eset.Clear()
             eset.AddGroup(FT_ELEM, grpIDs(g))
-            rbo.Clear()
-            rbo.DataNeeded(8, eset.ID)           ' 8 = elements, limited to this group
-            rbo.AddColumnV2(osetIDs(m), eseID, False, nAddedE, vIdxE)
-            rbo.AddColumnV2(osetIDs(m), ekeID, False, nAddedK, vIdxK)
-            rbo.Populate
-            eseCol = CLng(vIdxE(0))
-            ekeCol = CLng(vIdxK(0))
             rbo.GetColumnSum(eseCol, eset.ID, nNumVal, eseSum, dSq)
             rbo.GetColumnSum(ekeCol, eset.ID, nNumVal, ekeSum, dSq)
             wsD.Cells(rowD, eseStart + g).Value = eseSum
