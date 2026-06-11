@@ -172,18 +172,16 @@ Sub Main
     ekeTotalCol = ekeStart + nGroups
 
     ' Column A and row 1 are left blank as a margin (cleaner screenshots).
-    wsD.Cells(3, 2).Value = "Mode #"
-    wsD.Cells(3, 3).Value = "Freq [Hz]"
+    wsD.Cells(2, 2).Value = "Mode #"
+    wsD.Cells(2, 3).Value = "Freq [Hz]"
     wsD.Cells(2, eseStart).Value = "Element Strain Energy %"
     wsD.Cells(2, ekeStart).Value = "Element Kinetic Energy %"
     For g = 0 To nGroups - 1
-        wsD.Cells(3, eseStart + g).Value = grpIDs(g)
         wsD.Cells(4, eseStart + g).Value = grpTitles(g)
-        wsD.Cells(3, ekeStart + g).Value = grpIDs(g)
         wsD.Cells(4, ekeStart + g).Value = grpTitles(g)
     Next g
-    wsD.Cells(3, eseTotalCol).Value = "Total"
-    wsD.Cells(3, ekeTotalCol).Value = "Total"
+    wsD.Cells(4, eseTotalCol).Value = "Total"
+    wsD.Cells(4, ekeTotalCol).Value = "Total"
 
     ' ============================================================
     ' Section 6: Build the matrix - one Populate per mode
@@ -250,11 +248,11 @@ Sub Main
     wsD.Cells.Font.Name = "Calibri"
     wsD.Cells.Font.Size = 10
 
-    ' merges: Mode/Freq headers down rows 3-4; block title bars (col A & row 1 stay blank)
-    wsD.Range(wsD.Cells(3, 2), wsD.Cells(4, 2)).Merge
-    wsD.Range(wsD.Cells(3, 3), wsD.Cells(4, 3)).Merge
-    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(2, eseTotalCol)).Merge
-    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(2, ekeTotalCol)).Merge
+    ' merges: Mode/Freq label headers (rows 2-4); colored table title bars (rows 2-3)
+    wsD.Range(wsD.Cells(2, 2), wsD.Cells(4, 2)).Merge
+    wsD.Range(wsD.Cells(2, 3), wsD.Cells(4, 3)).Merge
+    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(3, eseTotalCol)).Merge
+    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(3, ekeTotalCol)).Merge
 
     ' number formats: frequency 1 decimal, percentages 0 decimals
     wsD.Range(wsD.Cells(5, 3), wsD.Cells(lastRow, 3)).NumberFormat = "0.0"
@@ -265,7 +263,7 @@ Sub Main
     wsD.Range(wsD.Cells(5, eseStart), wsD.Cells(lastRow, eseLast)).FormatConditions.AddDatabar.BarColor.Color = RGB(124, 156, 201)
     wsD.Range(wsD.Cells(5, ekeStart), wsD.Cells(lastRow, ekeLast)).FormatConditions.AddDatabar.BarColor.Color = RGB(166, 166, 166)
 
-    ' vertical group-title headers, anchored to the bottom
+    ' vertical group-name headers (row 4), anchored to the bottom
     wsD.Range(wsD.Cells(4, eseStart), wsD.Cells(4, eseLast)).Orientation = 90
     wsD.Range(wsD.Cells(4, ekeStart), wsD.Cells(4, ekeLast)).Orientation = 90
     wsD.Rows(4).RowHeight = 100
@@ -274,30 +272,27 @@ Sub Main
     wsD.UsedRange.HorizontalAlignment = -4108                                          ' xlCenter
     wsD.Range(wsD.Cells(2, 2), wsD.Cells(4, ekeTotalCol)).VerticalAlignment = -4107    ' xlBottom
 
-    ' header fills / fonts (column A and row 1 left blank for clean screenshots)
-    wsD.Range(wsD.Cells(3, 2), wsD.Cells(4, ekeTotalCol)).Interior.Color = RGB(238, 238, 238)
-    wsD.Range(wsD.Cells(3, eseStart), wsD.Cells(4, eseTotalCol)).Interior.Color = RGB(221, 230, 243)
-    wsD.Range(wsD.Cells(3, ekeStart), wsD.Cells(4, ekeTotalCol)).Interior.Color = RGB(232, 232, 232)
-    ' bold colored header bar per table so ESE and EKE read separately
-    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(2, eseTotalCol)).Interior.Color = RGB(46, 84, 141)
-    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(2, eseTotalCol)).Font.Color = RGB(255, 255, 255)
-    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(2, ekeTotalCol)).Interior.Color = RGB(99, 99, 99)
-    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(2, ekeTotalCol)).Font.Color = RGB(255, 255, 255)
+    ' fills (column A and row 1 left blank for clean screenshots)
+    wsD.Range(wsD.Cells(2, 2), wsD.Cells(4, 3)).Interior.Color = RGB(238, 238, 238)
+    wsD.Range(wsD.Cells(4, eseStart), wsD.Cells(4, eseTotalCol)).Interior.Color = RGB(221, 230, 243)
+    wsD.Range(wsD.Cells(4, ekeStart), wsD.Cells(4, ekeTotalCol)).Interior.Color = RGB(232, 232, 232)
+    ' colored table title bars (rows 2-3)
+    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(3, eseTotalCol)).Interior.Color = RGB(46, 84, 141)
+    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(3, eseTotalCol)).Font.Color = RGB(255, 255, 255)
+    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(3, ekeTotalCol)).Interior.Color = RGB(99, 99, 99)
+    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(3, ekeTotalCol)).Font.Color = RGB(255, 255, 255)
     wsD.Range(wsD.Cells(2, 2), wsD.Cells(4, ekeTotalCol)).Font.Bold = True
 
-    ' Total columns: tint + bold the data, too
+    ' Total columns: tint the data
     wsD.Range(wsD.Cells(5, eseTotalCol), wsD.Cells(lastRow, eseTotalCol)).Interior.Color = RGB(221, 230, 243)
     wsD.Range(wsD.Cells(5, ekeTotalCol), wsD.Cells(lastRow, ekeTotalCol)).Interior.Color = RGB(232, 232, 232)
     wsD.Range(wsD.Cells(5, eseTotalCol), wsD.Cells(lastRow, eseTotalCol)).Font.Bold = True
     wsD.Range(wsD.Cells(5, ekeTotalCol), wsD.Cells(lastRow, ekeTotalCol)).Font.Bold = True
 
-    ' thin inner grid + medium outer box on the Mode/Freq labels and each table
-    wsD.Range(wsD.Cells(3, 2), wsD.Cells(lastRow, 3)).Borders.LineStyle = 1
+    ' uniform thin borders (single standard thickness everywhere)
+    wsD.Range(wsD.Cells(2, 2), wsD.Cells(lastRow, 3)).Borders.LineStyle = 1
     wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(lastRow, eseTotalCol)).Borders.LineStyle = 1
     wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(lastRow, ekeTotalCol)).Borders.LineStyle = 1
-    wsD.Range(wsD.Cells(3, 2), wsD.Cells(lastRow, 3)).BorderAround 1, -4138
-    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(lastRow, eseTotalCol)).BorderAround 1, -4138
-    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(lastRow, ekeTotalCol)).BorderAround 1, -4138
 
     ' column widths (col A is a narrow blank margin)
     wsD.Columns(1).ColumnWidth = 3
@@ -313,12 +308,9 @@ Sub Main
     wsD.Columns(ekeTotalCol).ColumnWidth = 7
     wsD.Columns(gapCol).ColumnWidth = 4
 
-    ' freeze header rows + label columns, hide gridlines (cosmetic - guarded)
+    ' hide gridlines for clean screenshots (no frozen panes)
     On Error Resume Next
     wsD.Activate
-    appExcel.ActiveWindow.SplitColumn = 3
-    appExcel.ActiveWindow.SplitRow = 4
-    appExcel.ActiveWindow.FreezePanes = True
     appExcel.ActiveWindow.DisplayGridlines = False
     On Error GoTo 0
 
