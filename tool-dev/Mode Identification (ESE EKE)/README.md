@@ -19,8 +19,7 @@ with `PARAM,TINY,1.-20` so every element reports energy.
 2. **Resolve the energy vectors at runtime** (no hardcoded IDs) via
    `ResultsIDQuery.Elemental(1)` = Strain-Energy-Percent and `.Elemental(30)` =
    Kinetic-Energy-Percent (fallback: `Find(setID, "...Percent")` by title). This is
-   what makes it version-proof, and it pulls the **percent** EKE vector (not raw
-   energy).
+   what makes it version-proof — no hand-editing an ID when results change.
 3. **Coverage check** — compares the union of the selected groups to all model
    elements and warns if elements are **uncovered** (totals < 100%) or the groups
    **overlap** (totals > 100%).
@@ -54,7 +53,9 @@ columns → should read ~100.00 when the groups partition the model.
 
 ## Notes
 
-- A clean rewrite of an inherited "Mode ID" tool; the old hardcoded vector IDs
-  (`80001`/`80104`) are gone — `80104` was raw kinetic energy, so the old "EKE %" was
-  mislabeled; this version uses the true percent vector.
+- A clean rewrite of an inherited "Mode ID" tool. The old hardcoded vector IDs
+  (`80001`/`80104`) are replaced by the runtime `ResultsIDQuery` lookup, so the IDs
+  never need hand-editing when the results/version change. (Tested: the lookup
+  resolves to `80001`/`80104` and per-mode totals come out ~100%, confirming both are
+  the percent vectors.)
 - `Populate` is once per mode (not per mode×group) — the speed fix.
