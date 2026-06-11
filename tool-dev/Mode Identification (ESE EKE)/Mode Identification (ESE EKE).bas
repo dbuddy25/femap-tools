@@ -282,8 +282,13 @@ Sub Main
     wsD.Range(wsD.Cells(1, 1), wsD.Cells(1, ekeTotalCol)).Font.Color = RGB(255, 255, 255)
     wsD.Cells(1, 1).Font.Size = 14
     wsD.Range(wsD.Cells(3, 1), wsD.Cells(4, ekeTotalCol)).Interior.Color = RGB(238, 238, 238)
-    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(4, eseTotalCol)).Interior.Color = RGB(250, 224, 224)
-    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(4, ekeTotalCol)).Interior.Color = RGB(228, 242, 222)
+    wsD.Range(wsD.Cells(3, eseStart), wsD.Cells(4, eseTotalCol)).Interior.Color = RGB(250, 224, 224)
+    wsD.Range(wsD.Cells(3, ekeStart), wsD.Cells(4, ekeTotalCol)).Interior.Color = RGB(228, 242, 222)
+    ' bold colored header bar per table so ESE and EKE read separately
+    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(2, eseTotalCol)).Interior.Color = RGB(224, 102, 102)
+    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(2, eseTotalCol)).Font.Color = RGB(255, 255, 255)
+    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(2, ekeTotalCol)).Interior.Color = RGB(106, 168, 79)
+    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(2, ekeTotalCol)).Font.Color = RGB(255, 255, 255)
     wsD.Range(wsD.Cells(1, 1), wsD.Cells(4, ekeTotalCol)).Font.Bold = True
 
     ' Total columns: tint + bold the data, too
@@ -292,9 +297,14 @@ Sub Main
     wsD.Range(wsD.Cells(5, eseTotalCol), wsD.Cells(lastRow, eseTotalCol)).Font.Bold = True
     wsD.Range(wsD.Cells(5, ekeTotalCol), wsD.Cells(lastRow, ekeTotalCol)).Font.Bold = True
 
-    ' thin borders around each block (label cols + ESE, and EKE)
-    wsD.Range(wsD.Cells(2, 1), wsD.Cells(lastRow, eseTotalCol)).Borders.LineStyle = 1
+    ' thin inner grid for the labels and each table
+    wsD.Range(wsD.Cells(3, 1), wsD.Cells(lastRow, 3)).Borders.LineStyle = 1
+    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(lastRow, eseTotalCol)).Borders.LineStyle = 1
     wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(lastRow, ekeTotalCol)).Borders.LineStyle = 1
+    ' medium outer box around the labels and each table so ESE/EKE read as separate tables
+    wsD.Range(wsD.Cells(3, 1), wsD.Cells(lastRow, 3)).BorderAround 1, -4138
+    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(lastRow, eseTotalCol)).BorderAround 1, -4138
+    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(lastRow, ekeTotalCol)).BorderAround 1, -4138
 
     ' column widths
     wsD.Columns(1).ColumnWidth = 11
@@ -308,7 +318,7 @@ Sub Main
     Next cc
     wsD.Columns(eseTotalCol).ColumnWidth = 9
     wsD.Columns(ekeTotalCol).ColumnWidth = 9
-    wsD.Columns(gapCol).ColumnWidth = 2
+    wsD.Columns(gapCol).ColumnWidth = 4
 
     ' freeze header rows + label columns, hide gridlines (cosmetic - guarded)
     On Error Resume Next
