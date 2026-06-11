@@ -53,3 +53,8 @@ Grounding variant of *Connect Groups by CBUSH*. Pick one group and a plane; the 
 Modal post-processing: for each selected output set (mode) and element group, reports the group's % Element Strain Energy (ESE) and % Element Kinetic Energy (EKE), into one Excel sheet (ESE and EKE side by side, each with a per-mode Total column and red/green data bars). Resolves the energy output vectors at runtime via `ResultsIDQuery` (no hardcoded IDs — version-proof, no hand-editing when results change). Populates the Results browser once per mode and sums per group via the set-limit argument for speed. Warns if the selected groups don't cover all model elements (totals < 100%) or overlap (> 100%).
 
 **Use case:** Identify the nature of vibration modes — see which parts carry the strain vs kinetic energy of each mode, ranked by group, to interpret a normal-modes (SOL 103) run.
+
+### Export Group Elements (CSV)
+Small helper: exports the element membership of selected groups to a CSV (`element_id,group_id,group_title`, one row per element×group). Used to cross-check group-based post-processing against a solver file — join this mapping to per-element results from the F06/PUNCH and sum by group.
+
+**Use case:** Independently verify a "by group" results tool (e.g. Mode Identification ESE/EKE) against the Nastran output.
