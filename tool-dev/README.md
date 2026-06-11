@@ -49,7 +49,7 @@ Grounding variant of *Connect Groups by CBUSH*. Pick one group and a plane; the 
 
 **Use case:** Build a single ground/boundary interface for a bolted part — represent the fasteners and collapse the attachment to one node for applying constraints or loads.
 
-### Modal Energy by Group
+### Mode Identification (ESE EKE)
 Modal post-processing: for each selected output set (mode) and element group, reports the group's % Element Strain Energy (ESE) and % Element Kinetic Energy (EKE), into one Excel sheet (ESE and EKE side by side, each with a per-mode Total column and red/green data bars). Resolves the energy output vectors at runtime via `ResultsIDQuery` (no hardcoded IDs, version-proof, and pulls the true *percent* EKE vector). Populates the Results browser once per mode and sums per group via the set-limit argument for speed. Warns if the selected groups don't cover all model elements (totals < 100%) or overlap (> 100%).
 
 **Use case:** Identify the nature of vibration modes — see which parts carry the strain vs kinetic energy of each mode, ranked by group, to interpret a normal-modes (SOL 103) run.

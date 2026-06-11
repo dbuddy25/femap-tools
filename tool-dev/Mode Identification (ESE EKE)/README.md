@@ -1,6 +1,6 @@
-# Modal Energy by Group
+# Mode Identification (ESE EKE)
 
-*(file: `Modal Energy by Group.bas`)*
+*(file: `Mode Identification (ESE EKE).bas`)*
 
 **Status:** Built — pending in-Femap testing.
 

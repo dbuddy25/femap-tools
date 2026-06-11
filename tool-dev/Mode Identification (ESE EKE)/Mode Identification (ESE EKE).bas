@@ -1,4 +1,4 @@
-' Modal Energy by Group.bas
+' Mode Identification (ESE EKE).bas
 ' -----------------------------------------------------------------------------
 ' Modal post-processing: for each selected output set (mode) and each selected
 ' element group, report the group's % of Element Strain Energy (ESE) and %
@@ -136,7 +136,7 @@ Sub Main
                 + " (totals may exceed 100%)." + Chr$(10)
         End If
         wmsg = wmsg + Chr$(10) + "Continue anyway?"
-        If MsgBox(wmsg, vbOKCancel + vbExclamation, "Modal Energy by Group - Coverage check") <> vbOK Then
+        If MsgBox(wmsg, vbOKCancel + vbExclamation, "Mode Identification (ESE EKE) - Coverage check") <> vbOK Then
             App.feAppMessage(FCM_WARNING, "Cancelled at coverage check - nothing written")
             Exit Sub
         End If
@@ -171,7 +171,7 @@ Sub Main
     ekeStart = eseTotalCol + 2              ' one gap column after ESE Total
     ekeTotalCol = ekeStart + nGroups
 
-    wsD.Cells(1, 1).Value = "Modal Energy by Group  (% of model total, per mode)"
+    wsD.Cells(1, 1).Value = "Mode Identification (ESE EKE)  (% of model total, per mode)"
     wsD.Cells(3, 1).Value = "Output Set #"
     wsD.Cells(3, 2).Value = "Title"
     wsD.Cells(3, 3).Value = "Freq [Hz]"
@@ -258,7 +258,7 @@ Sub Main
     ' ============================================================
     ' Section 8: README sheet
     ' ============================================================
-    wsR.Cells(1, 1).Value = "Modal Energy by Group"
+    wsR.Cells(1, 1).Value = "Mode Identification (ESE EKE)"
     wsR.Cells(3, 1).Value = "Model:"
     wsR.Cells(3, 2).Value = App.ModelName
     wsR.Cells(4, 1).Value = "User:"
@@ -290,7 +290,7 @@ Sub Main
     ' Section 9: Finish
     ' ============================================================
     appExcel.Visible = True
-    App.feAppMessage(FCM_NORMAL, "Modal Energy by Group: wrote " + Trim$(Str$(nSets)) _
+    App.feAppMessage(FCM_NORMAL, "Mode Identification (ESE EKE): wrote " + Trim$(Str$(nSets)) _
         + " modes x " + Trim$(Str$(nGroups)) + " groups to Excel. ESE% vec " _
         + Trim$(Str$(eseID)) + ", EKE% vec " + Trim$(Str$(ekeID)) + ".")
 End Sub
