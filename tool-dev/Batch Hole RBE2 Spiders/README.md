@@ -1,4 +1,6 @@
-# make-rbe2-from-holes
+# Batch Hole RBE2 Spiders
+
+*(file: `Batch Hole RBE2 Spiders.bas`; formerly `make-rbe2-from-holes`)*
 
 **Status:** Built and working.
 

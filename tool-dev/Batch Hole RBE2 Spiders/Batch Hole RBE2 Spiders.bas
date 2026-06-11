@@ -1,4 +1,4 @@
-' make-rbe2-from-holes.bas
+' Batch Hole RBE2 Spiders.bas
 ' -----------------------------------------------------------------------------
 ' Select clearance-hole (bolt-hole) geometry and let Femap build one RBE2 spider
 ' per hole automatically. Works on either:
@@ -42,7 +42,7 @@ Sub Main
     ' ============================================================
     ' Section 0: Choose geometry type (surfaces vs curves)
     ' ============================================================
-    Begin Dialog ModeDlg 250, 120, "RBE2 from Holes - Geometry Type"
+    Begin Dialog ModeDlg 250, 120, "Batch Hole RBE2 Spiders - Geometry Type"
         GroupBox 12, 10, 226, 64, "Hole Geometry"
         OptionGroup .geomType
             OptionButton 22, 28, 200, 12, "Surfaces (Solid Mesh)"
@@ -257,20 +257,20 @@ Sub Main
         matNames(0) = "(no materials in model)"
     End If
 
-    Begin Dialog HoleDlg 330, 268, "Create RBE2 Spiders from Holes"
+    Begin Dialog HoleDlg 330, 268, "Batch Hole RBE2 Spiders"
         Text       12, 8,  306, 12, line1
         Text       12, 22, 306, 12, line2
         Text       12, 36, 306, 12, line3
         Text       12, 50, 306, 12, line4
         Text       12, 64, 306, 12, dofLine
-        GroupBox   12, 82, 306, 96, "Thermal expansion (optional)"
+        GroupBox   12, 82, 306, 96, "CTE (optional)"
         CheckBox   22, 98, 290, 12, "Apply CTE to RBE2s", .chkCTE
         OptionGroup .cteSource
-            OptionButton 22, 118, 96, 12, "From material:"
+            OptionButton 22, 118, 96, 12, "From mat:"
             OptionButton 22, 146, 96, 12, "Enter value:"
         DropListBox 120, 116, 188, 60, matNames(), .matPick
         TextBox     120, 144, 90, 12, .cteVal
-        CheckBox   12, 184, 306, 12, "Project center nodes onto a plane (after creation)", .chkProject
+        CheckBox   12, 184, 306, 12, "Project center nodes onto a plane", .chkProject
         Text       12, 206, 306, 12, "Click OK to create the spiders, Cancel to abort."
         OKButton   76, 238, 80, 20
         CancelButton 176, 238, 80, 20
@@ -514,7 +514,7 @@ Sub Main
     App.feViewRegenerate(0)
 
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
-    App.feAppMessage(FCM_HIGHLIGHT, "  Make RBE2 from Holes - Summary")
+    App.feAppMessage(FCM_HIGHLIGHT, "  Batch Hole RBE2 Spiders - Summary")
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
     App.feAppMessage(FCM_NORMAL, "  Geometry selected:     " + Str$(nGeom) + " " + geomWord + "(s)")
     App.feAppMessage(FCM_NORMAL, "  Holes identified:      " + Str$(nHoles))
