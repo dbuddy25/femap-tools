@@ -2,7 +2,7 @@
 
 *(file: `Batch Hole RBE2 Spiders.bas`; formerly `make-rbe2-from-holes`)*
 
-**Status:** Built and working.
+**Status:** Archived — deployed to the internal repo (2026-06-11). Kept here for reference; further changes happen in the internal repo.
 
 Custom tool to build **RBE2 spiders on clearance (bolt) holes** in one shot. Select
 the hole geometry — cylindrical **surfaces** (solid models) or hole-edge **curves**
