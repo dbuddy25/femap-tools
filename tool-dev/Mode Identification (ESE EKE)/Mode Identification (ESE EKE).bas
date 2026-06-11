@@ -242,23 +242,82 @@ Sub Main
     ' ============================================================
     ' Section 7: Formatting
     ' ============================================================
-    Dim lastRow As Long
+    Dim lastRow As Long, eseLast As Long, ekeLast As Long, gapCol As Long, cc As Long
     lastRow = 4 + nSets
-    ' number format (freq + both energy blocks incl. totals)
-    wsD.Range(wsD.Cells(5, 3), wsD.Cells(lastRow, ekeTotalCol)).NumberFormat = "0.00"
-    ' data bars: red on ESE group columns, green on EKE group columns
-    wsD.Range(wsD.Cells(5, eseStart), wsD.Cells(lastRow, eseStart + nGroups - 1)).FormatConditions.AddDatabar.BarColor.Color = RGB(220, 80, 80)
-    wsD.Range(wsD.Cells(5, ekeStart), wsD.Cells(lastRow, ekeStart + nGroups - 1)).FormatConditions.AddDatabar.BarColor.Color = RGB(80, 170, 90)
-    ' vertical group-title headers
-    wsD.Range(wsD.Cells(4, eseStart), wsD.Cells(4, eseStart + nGroups - 1)).Orientation = 90
-    wsD.Range(wsD.Cells(4, ekeStart), wsD.Cells(4, ekeStart + nGroups - 1)).Orientation = 90
-    ' merge each block title across its columns (group columns + Total)
+    eseLast = eseStart + nGroups - 1
+    ekeLast = ekeStart + nGroups - 1
+    gapCol = eseTotalCol + 1
+
+    ' base font
+    wsD.Cells.Font.Name = "Calibri"
+    wsD.Cells.Font.Size = 10
+
+    ' merges: sheet title across full width; label headers down rows 3-4; block titles
+    wsD.Range(wsD.Cells(1, 1), wsD.Cells(1, ekeTotalCol)).Merge
+    wsD.Range(wsD.Cells(3, 1), wsD.Cells(4, 1)).Merge
+    wsD.Range(wsD.Cells(3, 2), wsD.Cells(4, 2)).Merge
+    wsD.Range(wsD.Cells(3, 3), wsD.Cells(4, 3)).Merge
     wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(2, eseTotalCol)).Merge
     wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(2, ekeTotalCol)).Merge
-    ' center + bold headers
-    wsD.UsedRange.HorizontalAlignment = -4108        ' xlCenter
-    wsD.Rows("1:4").Font.Bold = True
-    wsD.UsedRange.Columns.AutoFit
+
+    ' number format
+    wsD.Range(wsD.Cells(5, 3), wsD.Cells(lastRow, ekeTotalCol)).NumberFormat = "0.00"
+
+    ' data bars on the group columns
+    wsD.Range(wsD.Cells(5, eseStart), wsD.Cells(lastRow, eseLast)).FormatConditions.AddDatabar.BarColor.Color = RGB(220, 90, 90)
+    wsD.Range(wsD.Cells(5, ekeStart), wsD.Cells(lastRow, ekeLast)).FormatConditions.AddDatabar.BarColor.Color = RGB(90, 175, 100)
+
+    ' vertical group-title headers, anchored to the bottom
+    wsD.Range(wsD.Cells(4, eseStart), wsD.Cells(4, eseLast)).Orientation = 90
+    wsD.Range(wsD.Cells(4, ekeStart), wsD.Cells(4, ekeLast)).Orientation = 90
+    wsD.Rows(4).RowHeight = 100
+
+    ' alignment
+    wsD.UsedRange.HorizontalAlignment = -4108                                         ' xlCenter
+    wsD.Range(wsD.Cells(2, 1), wsD.Cells(4, ekeTotalCol)).VerticalAlignment = -4107   ' xlBottom
+    wsD.Range(wsD.Cells(5, 2), wsD.Cells(lastRow, 2)).HorizontalAlignment = -4131     ' xlLeft (titles)
+
+    ' header fills / fonts
+    wsD.Range(wsD.Cells(1, 1), wsD.Cells(1, ekeTotalCol)).Interior.Color = RGB(31, 78, 121)
+    wsD.Range(wsD.Cells(1, 1), wsD.Cells(1, ekeTotalCol)).Font.Color = RGB(255, 255, 255)
+    wsD.Cells(1, 1).Font.Size = 14
+    wsD.Range(wsD.Cells(3, 1), wsD.Cells(4, ekeTotalCol)).Interior.Color = RGB(238, 238, 238)
+    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(4, eseTotalCol)).Interior.Color = RGB(250, 224, 224)
+    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(4, ekeTotalCol)).Interior.Color = RGB(228, 242, 222)
+    wsD.Range(wsD.Cells(1, 1), wsD.Cells(4, ekeTotalCol)).Font.Bold = True
+
+    ' Total columns: tint + bold the data, too
+    wsD.Range(wsD.Cells(5, eseTotalCol), wsD.Cells(lastRow, eseTotalCol)).Interior.Color = RGB(250, 224, 224)
+    wsD.Range(wsD.Cells(5, ekeTotalCol), wsD.Cells(lastRow, ekeTotalCol)).Interior.Color = RGB(228, 242, 222)
+    wsD.Range(wsD.Cells(5, eseTotalCol), wsD.Cells(lastRow, eseTotalCol)).Font.Bold = True
+    wsD.Range(wsD.Cells(5, ekeTotalCol), wsD.Cells(lastRow, ekeTotalCol)).Font.Bold = True
+
+    ' thin borders around each block (label cols + ESE, and EKE)
+    wsD.Range(wsD.Cells(2, 1), wsD.Cells(lastRow, eseTotalCol)).Borders.LineStyle = 1
+    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(lastRow, ekeTotalCol)).Borders.LineStyle = 1
+
+    ' column widths
+    wsD.Columns(1).ColumnWidth = 11
+    wsD.Columns(2).ColumnWidth = 26
+    wsD.Columns(3).ColumnWidth = 11
+    For cc = eseStart To eseLast
+        wsD.Columns(cc).ColumnWidth = 6
+    Next cc
+    For cc = ekeStart To ekeLast
+        wsD.Columns(cc).ColumnWidth = 6
+    Next cc
+    wsD.Columns(eseTotalCol).ColumnWidth = 9
+    wsD.Columns(ekeTotalCol).ColumnWidth = 9
+    wsD.Columns(gapCol).ColumnWidth = 2
+
+    ' freeze header rows + label columns, hide gridlines (cosmetic - guarded)
+    On Error Resume Next
+    wsD.Activate
+    appExcel.ActiveWindow.SplitColumn = 3
+    appExcel.ActiveWindow.SplitRow = 4
+    appExcel.ActiveWindow.FreezePanes = True
+    appExcel.ActiveWindow.DisplayGridlines = False
+    On Error GoTo 0
 
     ' ============================================================
     ' Section 8: README sheet
