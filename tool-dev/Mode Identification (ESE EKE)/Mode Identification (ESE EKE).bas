@@ -262,8 +262,8 @@ Sub Main
     wsD.Range(wsD.Cells(5, ekeStart), wsD.Cells(lastRow, ekeTotalCol)).NumberFormat = "0"
 
     ' data bars on the group columns
-    wsD.Range(wsD.Cells(5, eseStart), wsD.Cells(lastRow, eseLast)).FormatConditions.AddDatabar.BarColor.Color = RGB(220, 90, 90)
-    wsD.Range(wsD.Cells(5, ekeStart), wsD.Cells(lastRow, ekeLast)).FormatConditions.AddDatabar.BarColor.Color = RGB(90, 175, 100)
+    wsD.Range(wsD.Cells(5, eseStart), wsD.Cells(lastRow, eseLast)).FormatConditions.AddDatabar.BarColor.Color = RGB(124, 156, 201)
+    wsD.Range(wsD.Cells(5, ekeStart), wsD.Cells(lastRow, ekeLast)).FormatConditions.AddDatabar.BarColor.Color = RGB(166, 166, 166)
 
     ' vertical group-title headers, anchored to the bottom
     wsD.Range(wsD.Cells(4, eseStart), wsD.Cells(4, eseLast)).Orientation = 90
@@ -276,18 +276,18 @@ Sub Main
 
     ' header fills / fonts (column A and row 1 left blank for clean screenshots)
     wsD.Range(wsD.Cells(3, 2), wsD.Cells(4, ekeTotalCol)).Interior.Color = RGB(238, 238, 238)
-    wsD.Range(wsD.Cells(3, eseStart), wsD.Cells(4, eseTotalCol)).Interior.Color = RGB(250, 224, 224)
-    wsD.Range(wsD.Cells(3, ekeStart), wsD.Cells(4, ekeTotalCol)).Interior.Color = RGB(228, 242, 222)
+    wsD.Range(wsD.Cells(3, eseStart), wsD.Cells(4, eseTotalCol)).Interior.Color = RGB(221, 230, 243)
+    wsD.Range(wsD.Cells(3, ekeStart), wsD.Cells(4, ekeTotalCol)).Interior.Color = RGB(232, 232, 232)
     ' bold colored header bar per table so ESE and EKE read separately
-    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(2, eseTotalCol)).Interior.Color = RGB(224, 102, 102)
+    wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(2, eseTotalCol)).Interior.Color = RGB(46, 84, 141)
     wsD.Range(wsD.Cells(2, eseStart), wsD.Cells(2, eseTotalCol)).Font.Color = RGB(255, 255, 255)
-    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(2, ekeTotalCol)).Interior.Color = RGB(106, 168, 79)
+    wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(2, ekeTotalCol)).Interior.Color = RGB(99, 99, 99)
     wsD.Range(wsD.Cells(2, ekeStart), wsD.Cells(2, ekeTotalCol)).Font.Color = RGB(255, 255, 255)
     wsD.Range(wsD.Cells(2, 2), wsD.Cells(4, ekeTotalCol)).Font.Bold = True
 
     ' Total columns: tint + bold the data, too
-    wsD.Range(wsD.Cells(5, eseTotalCol), wsD.Cells(lastRow, eseTotalCol)).Interior.Color = RGB(250, 224, 224)
-    wsD.Range(wsD.Cells(5, ekeTotalCol), wsD.Cells(lastRow, ekeTotalCol)).Interior.Color = RGB(228, 242, 222)
+    wsD.Range(wsD.Cells(5, eseTotalCol), wsD.Cells(lastRow, eseTotalCol)).Interior.Color = RGB(221, 230, 243)
+    wsD.Range(wsD.Cells(5, ekeTotalCol), wsD.Cells(lastRow, ekeTotalCol)).Interior.Color = RGB(232, 232, 232)
     wsD.Range(wsD.Cells(5, eseTotalCol), wsD.Cells(lastRow, eseTotalCol)).Font.Bold = True
     wsD.Range(wsD.Cells(5, ekeTotalCol), wsD.Cells(lastRow, ekeTotalCol)).Font.Bold = True
 
