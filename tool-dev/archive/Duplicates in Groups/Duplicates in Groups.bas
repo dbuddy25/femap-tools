@@ -1,4 +1,4 @@
-' duplicates-in-groups.bas
+' Duplicates in Groups.bas
 ' Checks for entities (nodes, elements, csys, materials, properties) that
 ' appear in more than one of the user-selected groups and reports which
 ' groups share them.

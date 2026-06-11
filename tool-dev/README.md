@@ -14,17 +14,17 @@ Reconnects multiple RBE2 elements to new surfaces after remeshing. Automatically
 
 **Use case:** Bulk reattach all RBE2 spiders (e.g., a bolt pattern) after remeshing multiple surfaces.
 
-### renumber-groups
+### Renumber Groups  *(archived — deployed to internal repo; moved to [`archive/`](archive/Renumber%20Groups/Renumber%20Groups.md))*
 Renumbers all entities (nodes, elements, coordinate systems, materials, properties) in selected groups into non-overlapping ID ranges. Opens an interactive Excel spreadsheet where you can review and edit Start IDs, Range Sizes, and mark groups to Skip. Includes conflict detection for range overlaps.
 
 **Use case:** Organize IDs when combining multiple FEA subassemblies into a single model while avoiding ID collisions.
 
-### part-mass-scale
+### Part Mass Scale  *(archived — deployed to internal repo; moved to [`archive/`](archive/Part%20Mass%20Scale/Part%20Mass%20Scale.md))*
 Scales the mass of selected elements by modifying material densities, CONM2 mass values, and non-structural mass. Includes a verification step that recalculates total mass and reports pass/fail based on percent difference from the target.
 
 **Use case:** Adjust component weight to match actual hardware or prototype measurements while preserving mass distribution.
 
-### duplicates-in-groups
+### Duplicates in Groups  *(archived — deployed to internal repo; moved to [`archive/`](archive/Duplicates%20in%20Groups/Duplicates%20in%20Groups.md))*
 Scans selected groups and identifies entities (nodes, elements, coordinate systems, materials, properties) that appear in more than one group. Reports exactly which group pairs share entities.
 
 **Use case:** Detect unintended shared entities across assembly groups that should be isolated.
@@ -53,8 +53,3 @@ Grounding variant of *Connect Groups by CBUSH*. Pick one group and a plane; the 
 Modal post-processing: for each selected output set (mode) and element group, reports the group's % Element Strain Energy (ESE) and % Element Kinetic Energy (EKE), into one Excel sheet (ESE and EKE side by side, each with a per-mode Total column and red/green data bars). Resolves the energy output vectors at runtime via `ResultsIDQuery` (no hardcoded IDs — version-proof, no hand-editing when results change). Populates the Results browser once per mode and sums per group via the set-limit argument for speed. Warns if the selected groups don't cover all model elements (totals < 100%) or overlap (> 100%).
 
 **Use case:** Identify the nature of vibration modes — see which parts carry the strain vs kinetic energy of each mode, ranked by group, to interpret a normal-modes (SOL 103) run.
-
-### Export Group Elements (CSV)
-Small helper: exports the element membership of selected groups to a CSV (`element_id,group_id,group_title`, one row per element×group). Used to cross-check group-based post-processing against a solver file — join this mapping to per-element results from the F06/PUNCH and sum by group.
-
-**Use case:** Independently verify a "by group" results tool (e.g. Mode Identification ESE/EKE) against the Nastran output.

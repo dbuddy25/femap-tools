@@ -3,6 +3,7 @@
 Checks for entities that appear in more than one of the user-selected groups and reports exactly which group pairs share them.
 
 **Last updated:** 2026-02-23
+**Status:** Archived — deployed to internal repo (2026-06-11).
 
 ## Usage
 

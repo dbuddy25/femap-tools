@@ -3,6 +3,7 @@
 Scales the mass of user-selected elements by modifying material densities, CONM2 mass values, and non-structural mass. Includes a verification step that compares recalculated mass against the expected scaled mass.
 
 **Last updated:** 2026-02-23
+**Status:** Archived — deployed to internal repo (2026-06-11).
 
 ## Usage
 

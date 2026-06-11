@@ -1,4 +1,4 @@
-' renumber-groups.bas
+' Renumber Groups.bas
 ' Renumbers all entities (nodes, elements, csys, materials, properties) in
 ' selected groups into non-overlapping ID ranges with growth buffer.
 ' Uses Excel spreadsheet for interactive confirmation and editing.

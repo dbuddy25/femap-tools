@@ -1,4 +1,4 @@
-' part-mass-scale.bas
+' Part Mass Scale.bas
 ' Scales the mass of user-selected elements by modifying material densities
 ' and CONM2 mass values.
 ' Includes verification step comparing recalculated mass against expected scaled mass.

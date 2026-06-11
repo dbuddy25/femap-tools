@@ -3,6 +3,7 @@
 Renumbers all entities (nodes, elements, CSys, materials, properties) in selected groups into non-overlapping ID ranges with growth buffer. Uses an Excel spreadsheet for interactive confirmation and editing. Groups can be marked "Skip" to keep their current IDs while reserving their ID space.
 
 **Last updated:** 2026-03-03
+**Status:** Archived — deployed to internal repo (2026-06-11).
 
 ## Usage
 
