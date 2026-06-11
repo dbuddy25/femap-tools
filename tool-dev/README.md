@@ -48,3 +48,8 @@ Create CBUSH fastener elements between two parts (groups). Matches RBE2s whose i
 Grounding variant of *Connect Groups by CBUSH*. Pick one group and a plane; the tool fastens the group's RBE2 spiders whose center node is within a tolerance of the plane to a single ground interface node. For each found spider it creates a coincident node + a zero-length CBUSH (fastener/shear-pin PBUSH, one orientation CSys), then ties all the new nodes to a new ground RBE2 (DOF 123456, optional CTE from material or value) whose center node sits at the centroid of the pattern projected onto the plane. Results split into two groups (each new or existing): the CBUSH elements + PBUSH(es) + CSys (no nodes), and the ground RBE2 with its nodes.
 
 **Use case:** Build a single ground/boundary interface for a bolted part — represent the fasteners and collapse the attachment to one node for applying constraints or loads.
+
+### Modal Energy by Group
+Modal post-processing: for each selected output set (mode) and element group, reports the group's % Element Strain Energy (ESE) and % Element Kinetic Energy (EKE), into one Excel sheet (ESE and EKE side by side, each with a per-mode Total column and red/green data bars). Resolves the energy output vectors at runtime via `ResultsIDQuery` (no hardcoded IDs, version-proof, and pulls the true *percent* EKE vector). Populates the Results browser once per mode and sums per group via the set-limit argument for speed. Warns if the selected groups don't cover all model elements (totals < 100%) or overlap (> 100%).
+
+**Use case:** Identify the nature of vibration modes — see which parts carry the strain vs kinetic energy of each mode, ranked by group, to interpret a normal-modes (SOL 103) run.
