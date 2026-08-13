@@ -537,7 +537,32 @@ Sub Main
     End If
 
     ' ============================================================
-    ' Section 7: Report
+    ' Section 7: Re-evaluate the auto-add group
+    ' With Group -> Automatic Add on, the new nodes/elements land in the target
+    ' group but the group is left flagged as needing evaluation. If the view is
+    ' drawing that group, the spiders exist but don't draw (they DO show when
+    ' highlighted, since highlight bypasses the group filter). Evaluating here
+    ' makes them appear immediately.
+    ' ============================================================
+    Dim autoAdd As Long, autoGrp As Long
+    autoGrp = 0
+    autoAdd = App.Info_GroupAutomaticAdd
+    If autoAdd = -1 Then
+        autoGrp = App.Info_ActiveID(FT_GROUP)      ' -1 = "Active Group"
+    ElseIf autoAdd > 0 Then
+        autoGrp = autoAdd                          ' a specific group ID
+    End If
+    If autoGrp > 0 Then
+        ' Negative arg = a single group ID (positive would be a Set of group IDs)
+        rc = App.feGroupEvaluate(-autoGrp, True)
+        If rc <> FE_OK Then
+            App.feAppMessage(FCM_WARNING, "Could not evaluate auto-add group " _
+                + Trim$(Str$(autoGrp)) + " - run Group > Operations > Evaluate if the spiders don't draw")
+        End If
+    End If
+
+    ' ============================================================
+    ' Section 8: Report
     ' ============================================================
     App.feViewRegenerate(0)
 
@@ -565,6 +590,9 @@ Sub Main
     End If
     If doProject Then
         App.feAppMessage(FCM_NORMAL, "  Center nodes projected:" + Str$(projDone) + "  (orthogonal)")
+    End If
+    If autoGrp > 0 Then
+        App.feAppMessage(FCM_NORMAL, "  Auto-add group evaluated: " + Str$(autoGrp))
     End If
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
 End Sub

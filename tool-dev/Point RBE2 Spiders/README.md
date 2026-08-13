@@ -32,6 +32,7 @@ Builds one RBE2 spider per picked **mesh point** or **geometric point**, gatheri
 
 ## Notes
 
+- **Group → Automatic Add is handled.** New entities land in the target group but leave it flagged as needing evaluation, so with a group-filtered view the spiders exist without drawing (they still show when highlighted, since highlight bypasses the group filter). The tool reads `Info_GroupAutomaticAdd`, evaluates that group, then regenerates.
 - **The candidate pool is the safety net.** A bare sphere will happily reach through a plate thickness or into an adjacent part. Scope the pool to the surface/group/part you actually want tied and the distance filter can't misbehave.
 - Nodes already dependent on another RBE2/RBE3 are **not** screened — Nastran will reject a duplicate dependent DOF. Check the pool if the model already has rigids in the area.
 - Node coordinates from the API are global rectangular, so the radius is a plain global sphere.
