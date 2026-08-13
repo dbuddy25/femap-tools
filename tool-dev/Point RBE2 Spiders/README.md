@@ -3,7 +3,7 @@
 Builds one RBE2 spider per picked **mesh point** or **geometric point**, gathering the legs from a user-scoped pool of nearby nodes. The sibling of *Batch Hole RBE2 Spiders*, for locations that have no hole geometry to key off.
 
 **Last updated:** 2026-08-13
-**Status:** Built, untested in Femap.
+**Status:** Built and run in Femap; spiders verified correct.
 
 ## Usage
 
@@ -32,7 +32,8 @@ Builds one RBE2 spider per picked **mesh point** or **geometric point**, gatheri
 
 ## Notes
 
-- **Group → Automatic Add is handled.** New entities land in the target group but leave it flagged as needing evaluation, so with a group-filtered view the spiders exist without drawing (they still show when highlighted, since highlight bypasses the group filter). The tool reads `Info_GroupAutomaticAdd`, evaluates that group, then regenerates.
+- **Spiders created but not drawing?** Check **View > Visibility (Ctrl+Q) > Entity/Element > "elements with no property"**. RBE2s carry no property, so unchecking that box hides every rigid in the model — they still appear when highlighted, which makes it look like a creation failure. Next suspects: hidden layer, or a view filtered to a group.
+- **Group → Automatic Add is handled if you use it.** With it on, new entities join the target group but leave it flagged as needing evaluation, so a group-filtered view won't draw them. The tool reads `Info_GroupAutomaticAdd`, evaluates that group, then regenerates. No-op if Automatic Add is off.
 - **The candidate pool is the safety net.** A bare sphere will happily reach through a plate thickness or into an adjacent part. Scope the pool to the surface/group/part you actually want tied and the distance filter can't misbehave.
 - Nodes already dependent on another RBE2/RBE3 are **not** screened — Nastran will reject a duplicate dependent DOF. Check the pool if the model already has rigids in the area.
 - Node coordinates from the API are global rectangular, so the radius is a plain global sphere.
