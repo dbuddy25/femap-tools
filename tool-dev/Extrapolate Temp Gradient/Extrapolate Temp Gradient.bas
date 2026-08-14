@@ -72,11 +72,11 @@ Sub Main
         i = i + 1
     Loop
 
-    Begin Dialog SrcDlg 300, 120, "Extrapolate Temp Gradient - Source"
-        Text        12, 10, 276, 12, "Load set holding the existing nodal temperatures:"
-        DropListBox 12, 28, 276, 80, lsNames(), .lsPick
-        OKButton    60, 88, 80, 20
-        CancelButton 160, 88, 80, 20
+    Begin Dialog SrcDlg 400, 134, "Extrapolate Temp Gradient - Source"
+        Text        12, 12, 376, 12, "Load set holding the existing nodal temperatures:"
+        DropListBox 12, 32, 376, 60, lsNames(), .lsPick
+        OKButton     110, 96, 80, 20
+        CancelButton 210, 96, 80, 20
     End Dialog
 
     Dim sdlg As SrcDlg
@@ -188,8 +188,8 @@ Sub Main
         If sT(k) > tMax Then tMax = sT(k)
     Next k
 
-    App.feAppMessage(FCM_NORMAL, "Read " + Str$(nSeed) + " nodal temperature(s) from load set " _
-        + Trim$(Str$(srcSetID)) + "   (range " + Trim$(Str$(tMin)) + " to " + Trim$(Str$(tMax)) + ")")
+    App.feAppMessage(FCM_NORMAL, "Read " + Trim$(Str$(nSeed)) + " nodal temperature(s) from load set " _
+        + Trim$(Str$(srcSetID)) + "   (range " + Fmt(tMin) + " to " + Fmt(tMax) + ")")
 
     ' ============================================================
     ' Section 4: Fit along global X, Y, Z so the user can see which axis wins
@@ -201,29 +201,41 @@ Sub Main
     okY = FitAxis(nSeed, sX, sY, sZ, sT, 0.0, 1.0, 0.0, aY, bY, r2Y)
     okZ = FitAxis(nSeed, sX, sY, sZ, sT, 0.0, 0.0, 1.0, aZ, bZ, r2Z)
 
-    Dim lineX As String, lineY As String, lineZ As String
-    lineX = "  X:  " + FitLabel(okX, bX, r2X)
-    lineY = "  Y:  " + FitLabel(okY, bY, r2Y)
-    lineZ = "  Z:  " + FitLabel(okZ, bZ, r2Z)
+    ' Slope and R2 go in their own columns - the dialog font is proportional,
+    ' so padding them into one string does not line up.
+    Dim slpX As String, slpY As String, slpZ As String
+    Dim rsqX As String, rsqY As String, rsqZ As String
+    slpX = SlopeText(okX, bX) : rsqX = R2Text(okX, r2X)
+    slpY = SlopeText(okY, bY) : rsqY = R2Text(okY, r2Y)
+    slpZ = SlopeText(okZ, bZ) : rsqZ = R2Text(okZ, r2Z)
 
     Dim seedLine As String
-    seedLine = Trim$(Str$(nSeed)) + " seeded nodes, T from " _
-             + Trim$(Str$(tMin)) + " to " + Trim$(Str$(tMax))
+    seedLine = Trim$(Str$(nSeed)) + " seeded nodes,  T from " _
+             + Fmt(tMin) + " to " + Fmt(tMax)
 
-    Begin Dialog AxisDlg 340, 250, "Extrapolate Temp Gradient - Axis"
-        Text     12, 8,  316, 12, seedLine
-        Text     12, 24, 316, 12, "Linear fit quality per axis (R2 = 1.0 is a perfect gradient):"
-        Text     12, 40, 316, 12, lineX
-        Text     12, 54, 316, 12, lineY
-        Text     12, 68, 316, 12, lineZ
-        GroupBox 12, 88, 316, 96, "Extrapolate Along"
+    Begin Dialog AxisDlg 430, 286, "Extrapolate Temp Gradient - Axis"
+        Text     12, 10, 406, 12, seedLine
+        Text     12, 30, 406, 12, "Linear fit per axis.  R2 near 1 means the field really is a linear gradient:"
+        Text     28, 50, 44, 12, "Axis"
+        Text     76, 50, 170, 12, "Slope (per unit length)"
+        Text     256, 50, 100, 12, "R2"
+        Text     28, 68, 44, 12, "X"
+        Text     76, 68, 170, 12, slpX
+        Text     256, 68, 160, 12, rsqX
+        Text     28, 84, 44, 12, "Y"
+        Text     76, 84, 170, 12, slpY
+        Text     256, 84, 160, 12, rsqY
+        Text     28, 100, 44, 12, "Z"
+        Text     76, 100, 170, 12, slpZ
+        Text     256, 100, 160, 12, rsqZ
+        GroupBox 12, 126, 406, 104, "Extrapolate Along"
         OptionGroup .axisPick
-            OptionButton 22, 106, 140, 12, "Global X"
-            OptionButton 22, 124, 140, 12, "Global Y"
-            OptionButton 22, 142, 140, 12, "Global Z"
-            OptionButton 22, 160, 200, 12, "Custom vector (pick next)"
-        OKButton     80, 216, 80, 20
-        CancelButton 180, 216, 80, 20
+            OptionButton 26, 146, 240, 12, "Global X"
+            OptionButton 26, 166, 240, 12, "Global Y"
+            OptionButton 26, 186, 240, 12, "Global Z"
+            OptionButton 26, 206, 340, 12, "Custom vector  (you pick it next)"
+        OKButton     125, 248, 80, 20
+        CancelButton 225, 248, 80, 20
     End Dialog
 
     Dim adlg As AxisDlg
@@ -291,21 +303,23 @@ Sub Main
         Exit Sub
     End If
 
-    Dim tgtLine As String
+    Dim tgtLine As String, srcLine As String
     tgtLine = Trim$(Str$(nTgt)) + " target node(s) selected"
+    srcLine = "Extrapolating along " + axisName + "   (R2 = " + Fmt(fitR2) + ")"
 
-    Begin Dialog OptDlg 340, 230, "Extrapolate Temp Gradient - Options"
-        Text     12, 8,  316, 12, tgtLine
-        GroupBox 12, 26, 316, 76, "Write Temperatures To"
+    Begin Dialog OptDlg 430, 262, "Extrapolate Temp Gradient - Options"
+        Text     12, 10, 406, 12, tgtLine
+        Text     12, 26, 406, 12, srcLine
+        GroupBox 12, 48, 406, 84, "Write Temperatures To"
         OptionGroup .dest
-            OptionButton 22, 44, 200, 12, "The source load set"
-            OptionButton 22, 62, 90, 12, "New set:"
-        TextBox  116, 60, 200, 12, .newTitle
-        CheckBox 12, 112, 316, 12, "Clamp to the seeded temperature range", .chkClamp
-        Text     22, 128, 306, 12, "(caps runaway values far outside the seeded region)"
-        Text     12, 150, 316, 12, "Next dialog shows the fit and the resulting range."
-        OKButton     80, 196, 80, 20
-        CancelButton 180, 196, 80, 20
+            OptionButton 26, 68, 300, 12, "The source load set"
+            OptionButton 26, 92, 90, 12, "New set:"
+        TextBox  120, 90, 288, 12, .newTitle
+        CheckBox 12, 146, 406, 12, "Clamp results to the seeded temperature range", .chkClamp
+        Text     30, 162, 388, 12, "(caps runaway values far outside the seeded region)"
+        Text     12, 186, 406, 24, "The next dialog shows the fit and the resulting temperature range before anything is written."
+        OKButton     125, 224, 80, 20
+        CancelButton 225, 224, 80, 20
     End Dialog
 
     Dim odlg As OptDlg
@@ -366,32 +380,42 @@ Sub Main
     ' ============================================================
     ' Section 7: Confirm (nothing written yet)
     ' ============================================================
-    Dim c1 As String, c2 As String, c3 As String, c4 As String, c5 As String
-    c1 = "Axis:        " + axisName
-    c2 = "Fit:         T = " + Trim$(Str$(fitA)) + " + " + Trim$(Str$(fitB)) + " * s"
-    c3 = "R2:          " + Trim$(Str$(fitR2))
-    c4 = "Nodes:       " + Trim$(Str$(nTgt)) + " will receive temperatures"
-    c5 = "Result range:" + Str$(outMin) + " to" + Str$(outMax) _
-       + "   (seeded" + Str$(tMin) + " to" + Str$(tMax) + ")"
+    ' Label column / value column - one value per row, so nothing gets clipped.
+    Dim vAxis As String, vFit As String, vR2 As String
+    Dim vNodes As String, vSeedRng As String, vOutRng As String
+    vAxis    = axisName + "   (" + Fmt(nux) + ", " + Fmt(nuy) + ", " + Fmt(nuz) + ")"
+    vFit     = "T = " + Fmt(fitA) + "  +  " + Fmt(fitB) + " * s"
+    vR2      = Fmt(fitR2)
+    vNodes   = Trim$(Str$(nTgt)) + " nodes will receive temperatures"
+    vSeedRng = Fmt(tMin) + "  to  " + Fmt(tMax)
+    vOutRng  = Fmt(outMin) + "  to  " + Fmt(outMax)
 
     Dim warnLine As String
     warnLine = ""
     If fitR2 < 0.99 Then
-        warnLine = "WARNING: R2 below 0.99 - the source field is NOT linear along this axis."
+        warnLine = "WARNING:  R2 is below 0.99 - the source field is NOT linear along this axis," _
+                 + " so the extrapolated values are not trustworthy."
     ElseIf doClamp And clampedCnt > 0 Then
-        warnLine = Trim$(Str$(clampedCnt)) + " node(s) clamped to the seeded range."
+        warnLine = Trim$(Str$(clampedCnt)) + " node(s) will be clamped to the seeded range."
     End If
 
-    Begin Dialog ConfDlg 360, 190, "Extrapolate Temp Gradient - Confirm"
-        Text     12, 8,  336, 12, c1
-        Text     12, 22, 336, 12, c2
-        Text     12, 36, 336, 12, c3
-        Text     12, 50, 336, 12, c4
-        Text     12, 64, 336, 12, c5
-        Text     12, 82, 336, 24, warnLine
-        Text     12, 112, 336, 12, "Click OK to write the temperatures, Cancel to abort."
-        OKButton     90, 152, 80, 20
-        CancelButton 190, 152, 80, 20
+    Begin Dialog ConfDlg 460, 250, "Extrapolate Temp Gradient - Confirm"
+        Text     12, 12, 104, 12, "Axis:"
+        Text     120, 12, 328, 12, vAxis
+        Text     12, 30, 104, 12, "Fit:"
+        Text     120, 30, 328, 12, vFit
+        Text     12, 48, 104, 12, "R2:"
+        Text     120, 48, 328, 12, vR2
+        Text     12, 66, 104, 12, "Nodes:"
+        Text     120, 66, 328, 12, vNodes
+        Text     12, 88, 104, 12, "Seeded range:"
+        Text     120, 88, 328, 12, vSeedRng
+        Text     12, 106, 104, 12, "Result range:"
+        Text     120, 106, 328, 12, vOutRng
+        Text     12, 132, 436, 28, warnLine
+        Text     12, 168, 436, 12, "Click OK to write the temperatures, Cancel to abort."
+        OKButton     140, 210, 80, 20
+        CancelButton 240, 210, 80, 20
     End Dialog
 
     Dim cdlg As ConfDlg
@@ -450,27 +474,28 @@ Sub Main
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
     App.feAppMessage(FCM_HIGHLIGHT, "  Extrapolate Temp Gradient - Summary")
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
-    App.feAppMessage(FCM_NORMAL, "  Source load set:       " + Str$(srcSetID))
-    App.feAppMessage(FCM_NORMAL, "  Seeded nodes read:     " + Str$(nSeed))
+    App.feAppMessage(FCM_NORMAL, "  Source load set:       " + Trim$(Str$(srcSetID)))
+    App.feAppMessage(FCM_NORMAL, "  Seeded nodes read:     " + Trim$(Str$(nSeed)))
+    App.feAppMessage(FCM_NORMAL, "  Seeded range:          " + Fmt(tMin) + " to " + Fmt(tMax))
     App.feAppMessage(FCM_NORMAL, "  Axis:                  " + axisName _
-        + "  (" + Trim$(Str$(nux)) + ", " + Trim$(Str$(nuy)) + ", " + Trim$(Str$(nuz)) + ")")
-    App.feAppMessage(FCM_NORMAL, "  Fit:                   T = " + Trim$(Str$(fitA)) _
-        + " + " + Trim$(Str$(fitB)) + " * s")
-    App.feAppMessage(FCM_NORMAL, "  R-squared:             " + Str$(fitR2))
+        + "  (" + Fmt(nux) + ", " + Fmt(nuy) + ", " + Fmt(nuz) + ")")
+    App.feAppMessage(FCM_NORMAL, "  Fit:                   T = " + Fmt(fitA) _
+        + " + " + Fmt(fitB) + " * s")
+    App.feAppMessage(FCM_NORMAL, "  R-squared:             " + Fmt(fitR2))
     If fitR2 < 0.99 Then
         App.feAppMessage(FCM_WARNING, "  Source field is not linear along this axis - review the result")
     End If
-    App.feAppMessage(FCM_NORMAL, "  Target load set:       " + Str$(dstSetID))
-    App.feAppMessage(FCM_NORMAL, "  Temperatures written:  " + Str$(nTgt))
-    App.feAppMessage(FCM_NORMAL, "  Result range:         " + Str$(outMin) + " to" + Str$(outMax))
+    App.feAppMessage(FCM_NORMAL, "  Target load set:       " + Trim$(Str$(dstSetID)))
+    App.feAppMessage(FCM_NORMAL, "  Temperatures written:  " + Trim$(Str$(nTgt)))
+    App.feAppMessage(FCM_NORMAL, "  Result range:          " + Fmt(outMin) + " to " + Fmt(outMax))
     If doClamp Then
-        App.feAppMessage(FCM_NORMAL, "  Clamped to seed range: " + Str$(clampedCnt) + " node(s)")
+        App.feAppMessage(FCM_NORMAL, "  Clamped to seed range: " + Trim$(Str$(clampedCnt)) + " node(s)")
     End If
     If missing > 0 Then
-        App.feAppMessage(FCM_WARNING, "  Seeded temps with no matching node: " + Str$(missing))
+        App.feAppMessage(FCM_WARNING, "  Seeded temps with no matching node: " + Trim$(Str$(missing)))
     End If
     If autoGrp > 0 Then
-        App.feAppMessage(FCM_NORMAL, "  Auto-add group evaluated: " + Str$(autoGrp))
+        App.feAppMessage(FCM_NORMAL, "  Auto-add group evaluated: " + Trim$(Str$(autoGrp)))
     End If
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
 End Sub
@@ -534,13 +559,58 @@ Function FitAxis(cnt As Long, px() As Double, py() As Double, pz() As Double, _
 End Function
 
 ' -----------------------------------------------------------------------------
-' One-line description of a per-axis fit for the axis dialog.
+' Per-axis fit columns for the axis dialog.
 ' -----------------------------------------------------------------------------
-Function FitLabel(ok As Boolean, slope As Double, r2 As Double) As String
+Function SlopeText(ok As Boolean, slope As Double) As String
     If Not ok Then
-        FitLabel = "no spread along this axis"
+        SlopeText = "(no spread this way)"
     Else
-        FitLabel = "slope " + Trim$(Str$(slope)) + " per unit,  R2 = " + Trim$(Str$(r2))
+        SlopeText = Fmt(slope)
+    End If
+End Function
+
+Function R2Text(ok As Boolean, r2 As Double) As String
+    If Not ok Then
+        R2Text = "-"
+    ElseIf r2 >= 0.99999 Then
+        R2Text = "1.0000   (perfectly linear)"
+    ElseIf r2 < 0.99 Then
+        R2Text = Fmt(r2) + "   (not linear)"
+    Else
+        R2Text = Fmt(r2)
+    End If
+End Function
+
+' -----------------------------------------------------------------------------
+' Readable number for dialogs and messages. Str$ on a Double prints up to 15
+' significant digits, which overruns every fixed-width Text control - round to
+' 4 decimals in the normal range and fall back to Basic's own notation only for
+' values too large or too small to show that way.
+' -----------------------------------------------------------------------------
+Function Fmt(v As Double) As String
+    Dim a As Double
+    a = Abs(v)
+    If a = 0.0 Then
+        Fmt = "0"
+    ElseIf a >= 1000000.0 Or a < 0.0001 Then
+        Fmt = Trim$(Str$(v))
+    Else
+        Fmt = Trim$(Str$(RoundTo(v, 4)))
+    End If
+End Function
+
+' Sign-aware round to a number of decimal places (Int() truncates toward
+' negative infinity, so negatives need the explicit mirror).
+Function RoundTo(v As Double, places As Long) As Double
+    Dim sc As Double, i As Long
+    sc = 1.0
+    For i = 1 To places
+        sc = sc * 10.0
+    Next i
+    If v >= 0.0 Then
+        RoundTo = Int(v * sc + 0.5) / sc
+    Else
+        RoundTo = -Int(-v * sc + 0.5) / sc
     End If
 End Function
 

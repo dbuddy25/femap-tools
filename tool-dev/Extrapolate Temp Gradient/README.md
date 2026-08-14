@@ -3,7 +3,7 @@
 Reads the nodal temperatures that already exist on part of a model, fits a linear gradient along a chosen axis, and applies it to the rest of the model — extrapolating in both directions past the seeded region.
 
 **Last updated:** 2026-08-14
-**Status:** Built, untested in Femap.
+**Status:** Built and run in Femap.
 
 ## Usage
 
