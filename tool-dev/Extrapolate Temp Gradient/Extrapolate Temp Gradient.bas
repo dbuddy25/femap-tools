@@ -117,9 +117,7 @@ Sub Main
     ' ============================================================
     Dim seedSet As femap.Set
     Set seedSet = App.feSet
-    For k = 0 To nSeed - 1
-        seedSet.Add(CLng(vTNode(k)))
-    Next k
+    seedSet.AddArray(nSeed, vTNode)
 
     Dim nd As femap.Node
     Set nd = App.feNode
@@ -248,15 +246,19 @@ Sub Main
     ElseIf adlg.axisPick = 2 Then
         ux = 0.0 : uy = 0.0 : uz = 1.0 : axisName = "global Z"
     Else
-        Dim vBase As Variant, vTip As Variant
-        rc = App.feVectorPick("Pick the direction to extrapolate the gradient along", vBase, vTip)
+        ' feVectorPick( dlgTitle, unitVector, vecLength, vecBase, vecDir )
+        ' vecDir always comes back as a unit vector, so use it directly.
+        Dim vecLen As Double
+        Dim vBase As Variant, vDir As Variant
+        rc = App.feVectorPick("Pick the direction to extrapolate the gradient along", _
+                              True, vecLen, vBase, vDir)
         If rc <> FE_OK Then
             App.feAppMessage(FCM_WARNING, "Vector pick cancelled - no changes made")
             Exit Sub
         End If
-        ux = CDbl(vTip(0)) - CDbl(vBase(0))
-        uy = CDbl(vTip(1)) - CDbl(vBase(1))
-        uz = CDbl(vTip(2)) - CDbl(vBase(2))
+        ux = CDbl(vDir(0))
+        uy = CDbl(vDir(1))
+        uz = CDbl(vDir(2))
         axisName = "custom vector"
     End If
 
