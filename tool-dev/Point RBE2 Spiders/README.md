@@ -38,3 +38,8 @@ Builds one RBE2 spider per picked **mesh point** or **geometric point**, gatheri
 - Nodes already dependent on another RBE2/RBE3 are **not** screened — Nastran will reject a duplicate dependent DOF. Check the pool if the model already has rigids in the area.
 - Node coordinates from the API are global rectangular, so the radius is a plain global sphere.
 - Mesh point handling (`feMeshHardPoint`, `vLocationOnGeometry`, `PointID`) is written from the API guide and has not been exercised against a live model yet.
+
+## Possible extensions
+
+- **Screen out nodes already dependent on another rigid** before building, rather than letting Nastran reject the deck.
+- **Port the `Fmt` number helper** from *Extrapolate Temp Gradient* — the radius and CTE readouts here still use raw `Str$`, which will render a CTE like `1.2E-05` awkwardly.

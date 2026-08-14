@@ -37,3 +37,7 @@ Reads the nodal temperatures that already exist on part of a model, fits a linea
 - Node coordinates from the API are global rectangular, so the projection axis is interpreted in global rectangular coordinates.
 - Temperature-dependent functions (`LoadNTemp.function`) are not carried over — created temperatures are constant values.
 - Handles **Group → Automatic Add** if you use it (evaluates the target group before regenerating); no-op if it's off.
+
+## Possible extensions
+
+- **Bilinear fit** (`T = a + b·x + c·y`) for a field with a genuine two-axis gradient. The current fit is single-axis: it projects onto one direction and ignores the other two, producing a field that is constant on every plane perpendicular to that axis. A low R² over a seed region that spans more than one direction is the signal that this is needed.
