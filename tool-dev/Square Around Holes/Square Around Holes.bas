@@ -4,24 +4,31 @@
 ' that circle's own plane, centered on its center, with its four edges TANGENT
 ' to the circle (side = 2 * radius). The square is created as four curves.
 '
-' Per selected curve the tool needs three things, all of which Femap can give
-' for BOTH native arc/circle curves and solid (imported CAD) curves:
-'   - center  -> feCoordCurveCenter
-'   - plane   -> fePlaneCurveNormal (returns the plane normal AND a plane X axis)
-'   - radius  -> distance from the center to a point on the curve
-'                (Curve.ParamToXYZ at s=0.5, i.e. the arc midpoint)
+' Per selected curve the tool needs a center, a plane and a radius, for BOTH
+' native arc/circle curves and solid (imported CAD) curves:
+'   - center -> feCoordCurveCenter
+'   - three points on the curve -> Curve.ParamToXYZ at s = 0, 0.33, 0.66
+'   - radius -> distance from the center to those points
+'   - plane normal -> cross product of two of those radius vectors
 '
 ' Curve.ArcCircleInfo would hand back center/normal/radius in one call, but it
-' is documented to fail on solid curves - which is exactly the case for a hole
-' edge on imported geometry - so the three calls above are used instead.
+' is documented to fail on solid curves - exactly the case for a hole edge on
+' imported geometry - so it cannot be used here.
 '
-' Screening non-circular curves takes a little care. feCoordCurveCenter is
-' documented to do NO checking on a solid curve - it assumes whatever it is
-' handed is an arc - so a planar spline would return a plausible "center" and
-' a meaningless radius. After computing the radius the tool therefore samples
-' two more parametric locations on the curve and requires them to be the same
-' distance from the center (SameRadius). Anything that fails is counted as
-' skipped rather than squared.
+' The plane is NOT taken from fePlaneCurveNormal. Its documentation contradicts
+' itself: "Defines a plane that is normal to a curve" (a plane perpendicular to
+' the curve, whose normal is the tangent) versus "This is usually used with
+' arcs and circles to determine their plane" (the plane containing the curve).
+' v1 of this tool trusted the second reading and produced squares standing
+' perpendicular to the holes. Two radius vectors and a cross product give the
+' hole axis with no interpretation required.
+'
+' Screening non-circular curves takes care too. feCoordCurveCenter is documented
+' to do NO checking on a solid curve - it assumes whatever it is handed is an
+' arc - so a planar spline would return a plausible "center" and a meaningless
+' radius. Requiring all three sampled points to sit the same distance from the
+' center validates the center and the radius together; anything that fails is
+' counted as skipped rather than squared.
 '
 ' ORIENTATION
 ' A circumscribing square has infinitely many valid rotations about the hole
@@ -29,12 +36,12 @@
 '   - Pick a direction vector (feVectorPick). The picked vector is PROJECTED
 '     into each hole's plane, so one pick orients a whole bolt pattern even if
 '     the holes are not all coplanar.
-'   - Or use each hole plane's own X axis (whatever fePlaneCurveNormal reports).
-'     Zero extra picks, but the rotation is arbitrary per hole.
+'   - Or use a radius of the hole itself (the vector from the center to the
+'     curve's start point). Zero extra picks, arbitrary rotation per hole.
 ' If the picked vector is (near-)parallel to a hole's axis the projection
-' collapses and the direction is meaningless. Those holes fall back to the
-' plane X axis and are reported separately in the confirm dialog - the tally is
-' shown before anything is written, so a bad pick can be cancelled.
+' collapses and the direction is meaningless. Those holes fall back to a hole
+' radius and are reported separately in the confirm dialog - the tally is shown
+' before anything is written, so a bad pick can be cancelled.
 '
 ' SIZE
 ' Tangent (side = 2R) is the default, but a washer / doubler footprint is
@@ -108,7 +115,7 @@ Sub Main
         GroupBox   12, 124, 316, 74, "Square Orientation (rotation about the hole axis)"
         OptionGroup .orientMode
             OptionButton 22, 142, 290, 12, "Pick a direction vector (projected into each hole plane)"
-            OptionButton 22, 164, 290, 12, "Use each hole plane's own X axis (no extra pick)"
+            OptionButton 22, 164, 290, 12, "Use a radius of the hole itself (no extra pick)"
         Text       12, 206, 316, 12, "Next dialog shows the tally before anything is created."
         OKButton    82, 232, 80, 20
         CancelButton 182, 232, 80, 20
@@ -175,7 +182,7 @@ Sub Main
         vz = CDbl(vDir(2))
         orientNote = "picked vector"
     Else
-        orientNote = "hole plane X axis"
+        orientNote = "hole radius vector"
     End If
 
     ' ============================================================
@@ -188,6 +195,7 @@ Sub Main
     Dim cenX() As Double, cenY() As Double, cenZ() As Double
     Dim axX() As Double,  axY() As Double,  axZ() As Double
     Dim ayX() As Double,  ayY() As Double,  ayZ() As Double
+    Dim nrX() As Double,  nrY() As Double,  nrZ() As Double
     Dim halfSide() As Double
     Dim radArr() As Double
     Dim curOK() As Boolean
@@ -201,22 +209,28 @@ Sub Main
     ReDim ayX(nCur - 1)
     ReDim ayY(nCur - 1)
     ReDim ayZ(nCur - 1)
+    ReDim nrX(nCur - 1)
+    ReDim nrY(nCur - 1)
+    ReDim nrZ(nCur - 1)
     ReDim halfSide(nCur - 1)
     ReDim radArr(nCur - 1)
     ReDim curOK(nCur - 1)
     ReDim curFell(nCur - 1)
 
     Dim vCen As Variant
-    Dim plBase As Variant, plNormal As Variant, plAxis As Variant
-    Dim vOnCurve As Variant
 
     Dim ccx As Double, ccy As Double, ccz As Double
+    Dim q0x As Double, q0y As Double, q0z As Double
+    Dim q1x As Double, q1y As Double, q1z As Double
+    Dim q2x As Double, q2y As Double, q2z As Double
+    Dim d0x As Double, d0y As Double, d0z As Double
+    Dim d1x As Double, d1y As Double, d1z As Double
+    Dim d2x As Double, d2y As Double, d2z As Double
     Dim pnx As Double, pny As Double, pnz As Double
-    Dim pax As Double, pay As Double, paz As Double
-    Dim ptx As Double, pty As Double, ptz As Double
     Dim ex As Double, ey As Double, ez As Double
     Dim fx As Double, fy As Double, fz As Double
-    Dim vlen As Double, vdot As Double, rad As Double
+    Dim vlen As Double, vdot As Double
+    Dim rad As Double, rad1 As Double, rad2 As Double
 
     Dim nGood As Long, nBad As Long, nDegen As Long
     Dim minR As Double, maxR As Double
@@ -236,17 +250,76 @@ Sub Main
         rc = App.feCoordCurveCenter(curID(i), vCen)
         If rc <> FE_OK Then stepOK = False
 
-        ' -- plane: normal + a reference X axis in that plane -----------------
         If stepOK Then
             ccx = CDbl(vCen(0)) : ccy = CDbl(vCen(1)) : ccz = CDbl(vCen(2))
-            rc = App.fePlaneCurveNormal(curID(i), plBase, plNormal, plAxis)
+            rc = cu.Get(curID(i))
             If rc <> FE_OK Then stepOK = False
         End If
 
+        ' -- three points on the curve ----------------------------------------
+        ' The plane is derived from these rather than from fePlaneCurveNormal.
+        ' That function's documentation contradicts itself - "defines a plane
+        ' that is normal to a curve" vs "used with arcs and circles to determine
+        ' their plane" - and v1 of this tool trusted the second reading and
+        ' produced squares standing perpendicular to the holes. Three points and
+        ' a cross product need no interpretation.
+        '
+        ' s = 0 and s = 1 are the same location on a closed circle, so the
+        ' samples are spread across the parameter range instead.
         If stepOK Then
-            pnx = CDbl(plNormal(0)) : pny = CDbl(plNormal(1)) : pnz = CDbl(plNormal(2))
-            pax = CDbl(plAxis(0))   : pay = CDbl(plAxis(1))   : paz = CDbl(plAxis(2))
+            If Not CurvePoint(cu, 0.0,  q0x, q0y, q0z) Then stepOK = False
+        End If
+        If stepOK Then
+            If Not CurvePoint(cu, 0.33, q1x, q1y, q1z) Then stepOK = False
+        End If
+        If stepOK Then
+            If Not CurvePoint(cu, 0.66, q2x, q2y, q2z) Then stepOK = False
+        End If
+
+        ' -- radius + circularity check ---------------------------------------
+        ' feCoordCurveCenter is documented to do NO checking on solid curves -
+        ' it just assumes whatever it is handed is an arc. A planar spline would
+        ' therefore return a plausible "center" and a meaningless radius. On a
+        ' real arc/circle all three sampled points are the same distance from
+        ' the center, which validates the center and the radius together.
+        If stepOK Then
+            d0x = q0x - ccx : d0y = q0y - ccy : d0z = q0z - ccz
+            d1x = q1x - ccx : d1y = q1y - ccy : d1z = q1z - ccz
+            d2x = q2x - ccx : d2y = q2y - ccy : d2z = q2z - ccz
+
+            rad  = Sqr(d0x * d0x + d0y * d0y + d0z * d0z)
+            rad1 = Sqr(d1x * d1x + d1y * d1y + d1z * d1z)
+            rad2 = Sqr(d2x * d2x + d2y * d2y + d2z * d2z)
+
+            If rad <= 0.0 Then
+                stepOK = False
+            ElseIf Abs(rad1 - rad) > 0.001 * rad Then
+                stepOK = False
+            ElseIf Abs(rad2 - rad) > 0.001 * rad Then
+                stepOK = False
+            End If
+        End If
+
+        ' -- plane normal = (P0-C) x (P1-C) -----------------------------------
+        ' Both vectors lie in the hole's plane by construction, so their cross
+        ' product is the hole axis. Its sign is irrelevant here: flipping it
+        ' only swaps which way the in-plane Y axis points, and the square is
+        ' symmetric either way.
+        If stepOK Then
+            pnx = d0y * d1z - d0z * d1y
+            pny = d0z * d1x - d0x * d1z
+            pnz = d0x * d1y - d0y * d1x
             vlen = Sqr(pnx * pnx + pny * pny + pnz * pnz)
+
+            ' Nearly colinear (a very short arc, where P0 and P1 are close
+            ' together) - the widest-separated pair is the better lever arm.
+            If vlen <= 0.000001 * rad * rad Then
+                pnx = d0y * d2z - d0z * d2y
+                pny = d0z * d2x - d0x * d2z
+                pnz = d0x * d2y - d0y * d2x
+                vlen = Sqr(pnx * pnx + pny * pny + pnz * pnz)
+            End If
+
             If vlen > 0.0 Then
                 pnx = pnx / vlen : pny = pny / vlen : pnz = pnz / vlen
             Else
@@ -254,39 +327,9 @@ Sub Main
             End If
         End If
 
-        ' -- radius: distance from the center to a point on the curve ---------
-        If stepOK Then
-            rc = cu.Get(curID(i))
-            If rc <> FE_OK Then stepOK = False
-        End If
-
-        If stepOK Then
-            rc = cu.ParamToXYZ(0.5, vOnCurve)
-            If rc <> FE_OK Then stepOK = False
-        End If
-
-        If stepOK Then
-            ptx = CDbl(vOnCurve(0)) : pty = CDbl(vOnCurve(1)) : ptz = CDbl(vOnCurve(2))
-            rad = Sqr((ptx - ccx) * (ptx - ccx) _
-                    + (pty - ccy) * (pty - ccy) _
-                    + (ptz - ccz) * (ptz - ccz))
-            If rad <= 0.0 Then stepOK = False
-        End If
-
-        ' -- circularity check -------------------------------------------------
-        ' feCoordCurveCenter is documented to do NO checking on solid curves -
-        ' it just assumes whatever it is handed is an arc. A planar spline would
-        ' therefore return a "center" and a plane and produce a meaningless
-        ' radius. Sample two more parametric locations: on a real arc/circle
-        ' every point is the same distance from the center.
-        If stepOK Then
-            If Not SameRadius(cu, 0.2, ccx, ccy, ccz, rad) Then stepOK = False
-        End If
-        If stepOK Then
-            If Not SameRadius(cu, 0.8, ccx, ccy, ccz, rad) Then stepOK = False
-        End If
-
         ' -- in-plane X direction ---------------------------------------------
+        ' The no-pick fallback is (P0 - C), a radius vector, which lies in the
+        ' hole's plane by definition.
         If stepOK Then
             If usePicked Then
                 ' Project the picked vector into this hole's plane.
@@ -297,15 +340,15 @@ Sub Main
                 vlen = Sqr(ex * ex + ey * ey + ez * ez)
                 ' vDir came back as a unit vector, so vlen is sin(angle between
                 ' the pick and the hole plane). Below ~3 deg the projected
-                ' direction is numerical noise - fall back to the plane axis.
+                ' direction is numerical noise - fall back to the radius vector.
                 If vlen < 0.05 Then
-                    ex = pax : ey = pay : ez = paz
-                    vlen = Sqr(ex * ex + ey * ey + ez * ez)
+                    ex = d0x : ey = d0y : ez = d0z
+                    vlen = rad
                     curFell(i) = True
                 End If
             Else
-                ex = pax : ey = pay : ez = paz
-                vlen = Sqr(ex * ex + ey * ey + ez * ez)
+                ex = d0x : ey = d0y : ez = d0z
+                vlen = rad
             End If
             If vlen > 0.0 Then
                 ex = ex / vlen : ey = ey / vlen : ez = ez / vlen
@@ -331,6 +374,7 @@ Sub Main
             cenX(i) = ccx : cenY(i) = ccy : cenZ(i) = ccz
             axX(i)  = ex  : axY(i)  = ey  : axZ(i)  = ez
             ayX(i)  = fx  : ayY(i)  = fy  : ayZ(i)  = fz
+            nrX(i)  = pnx : nrY(i)  = pny : nrZ(i)  = pnz
             radArr(i) = rad
 
             If sizeMode = 0 Then
@@ -385,7 +429,7 @@ Sub Main
         If cLine5 <> "" Then cLine5 = cLine5 + "  "
         cLine5 = cLine5 + "WARNING: " + Trim$(Str$(nDegen)) _
                + " hole(s) have an axis nearly parallel to the picked vector" _
-               + " - those use the hole plane X axis instead."
+               + " - those use a hole radius instead."
     End If
 
     Begin Dialog ConfirmDlg 360, 190, "Square Around Holes - Confirm"
@@ -467,9 +511,15 @@ Sub Main
 
             If madeAll Then
                 sqCount = sqCount + 1
+                ' The hole axis is echoed because it is the one quantity that
+                ' cannot be eyeballed from the result: a square in the wrong
+                ' plane and a square in the right plane look equally plausible
+                ' until you rotate the view.
                 App.feAppMessage(FCM_NORMAL, "Curve " + Trim$(Str$(curID(i))) _
                     + ": R = " + Fmt(radArr(i)) _
-                    + ", square side " + Fmt(hs * 2.0))
+                    + ", side " + Fmt(hs * 2.0) _
+                    + ", hole axis (" + Fmt(nrX(i)) + ", " _
+                    + Fmt(nrY(i)) + ", " + Fmt(nrZ(i)) + ")")
             Else
                 App.feAppMessage(FCM_ERROR, "Curve " + Trim$(Str$(curID(i))) _
                     + ": one or more edges failed to create")
@@ -530,27 +580,22 @@ Sub Main
 End Sub
 
 ' -----------------------------------------------------------------------------
-' True if the point at parametric location s on the loaded curve sits the same
-' distance from (ccx,ccy,ccz) as refRad, within a relative tolerance. Used to
-' reject curves that are not actually arcs or circles.
+' Read the global-rectangular coordinates at parametric location s on the
+' already-loaded curve. Returns False if the curve could not be evaluated.
 ' -----------------------------------------------------------------------------
-Function SameRadius(cu As femap.Curve, s As Double, _
-                    ccx As Double, ccy As Double, ccz As Double, _
-                    refRad As Double) As Boolean
+Function CurvePoint(cu As femap.Curve, s As Double, _
+                    px As Double, py As Double, pz As Double) As Boolean
     Dim vXYZ As Variant
     Dim rc As Long
-    Dim dx As Double, dy As Double, dz As Double, dr As Double
 
-    SameRadius = False
+    CurvePoint = False
     rc = cu.ParamToXYZ(s, vXYZ)
     If rc <> FE_OK Then Exit Function
 
-    dx = CDbl(vXYZ(0)) - ccx
-    dy = CDbl(vXYZ(1)) - ccy
-    dz = CDbl(vXYZ(2)) - ccz
-    dr = Sqr(dx * dx + dy * dy + dz * dz)
-
-    If Abs(dr - refRad) <= 0.001 * refRad Then SameRadius = True
+    px = CDbl(vXYZ(0))
+    py = CDbl(vXYZ(1))
+    pz = CDbl(vXYZ(2))
+    CurvePoint = True
 End Function
 
 ' -----------------------------------------------------------------------------
