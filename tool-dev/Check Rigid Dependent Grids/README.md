@@ -1,6 +1,8 @@
-# Check Rigid Dependent DOF
+# Check Rigid Dependent Grids
 
-Model QA: finds rigid elements that fight over the same **dependent DOF**. Nastran rejects a deck where the same `(node, DOF)` is dependent on more than one rigid — this catches it before the solver does.
+Model QA: finds rigid elements that fight over the same **dependent grid + DOF**. Nastran rejects a deck where the same `(grid, DOF)` is dependent on more than one rigid — this catches it before the solver does.
+
+Femap calls grids **nodes**, so API terms below (`node(0)`, `GetNodeList`, node lists) are the Femap spelling of the same thing. Output says grid.
 
 **Last updated:** 2026-08-17
 **Status:** Written, **not yet run in Femap**. Two API readings are unverified — see *Verify this first*.
@@ -14,7 +16,7 @@ Model QA: finds rigid elements that fight over the same **dependent DOF**. Nastr
 
 ## What It Does
 
-The check is at **node + DOF** level, not node level. A node may legally be dependent on one RBE2 for `123` and another for `456`; a node-level check would report that as an error every time.
+The check is at **grid + DOF** level, not grid level. A grid may legally be dependent on one RBE2 for `123` and another for `456`; a grid-level check would report that as an error every time.
 
 Femap has **one** rigid element type (`FET_L_RIGID` = 29). RBE2 and RBE3 are told apart by the `Elem.RigidInterpolate` flag, not by type:
 
@@ -23,11 +25,11 @@ Femap has **one** rigid element type (`FET_L_RIGID` = 29). RBE2 and RBE3 are tol
 | **RBE2** (`RigidInterpolate` False) | Independent, DOF in `Release(0,0..5)` | **Dependent** — DOF in `dof(6i..6i+5)` ← checked |
 | **RBE3** (`RigidInterpolate` True) | **Dependent** / reference ← checked | Independent, carries the weights |
 
-Entries are collected, sorted by node, and each run of equal node IDs is compared pairwise; any pair whose DOF masks overlap is a conflict.
+Entries are collected, sorted by grid, and each run of equal grid IDs is compared pairwise; any pair whose DOF masks overlap is a conflict.
 
 ## Output
 
-- A Messages line per conflict: node, the specific overlapping DOFs, and the two element IDs
+- A Messages line per conflict: grid, the specific overlapping DOFs, and the two element IDs
 - Optional group of the conflicting elements
 - Summary with per-type counts and coverage caveats
 
@@ -48,14 +50,14 @@ As a backstop, if a type is found but yields **zero** dependent DOF entries, the
 - **Coverage is RBE2 + RBE3 only** (topology `FTO_RIGIDLIST` = 13). RBAR, RROD and RBE1 store dependent DOF completely differently — `vRigidBarDOFs`, `RigidRodDependentDof`, and (for RBE1) a second node list that `GetNodeList` explicitly does not expose. Those are **counted and reported as unchecked** rather than skipped silently, so a clean result is never mistaken for full coverage.
 - **There is no bulk getter for rigid node lists.** `GetAllArray` states outright that elements referencing node lists "will not have the nodes from their node lists in this array". So this is one `Get` + `GetNodeList` per rigid — unavoidable, and the reason the element set is built with `AddRule(FET_L_RIGID, FGD_ELEM_BYTYPE)` rather than by walking the model.
 - **Femap has no built-in API check for this.** The full `feCheck*` family was reviewed; `feCheckConstraints` looks at the active constraint set only and never touches rigid elements.
-- **Sorting, not bucketing.** Bucketing by node ID would need an array sized to the largest node ID in the model — fine at 50k nodes, ugly on a renumbered model with IDs in the millions.
+- **Sorting, not bucketing.** Bucketing by grid ID would need an array sized to the largest grid ID in the model — fine at 50k grids, ugly on a renumbered model with IDs in the millions.
 - **Group populate order matters:** `SetAdd` builds selection *rules* on the in-memory object, so `Put` must come **after** the adds, then `feGroupEvaluate`. Put first and the group comes out empty.
 - Bitwise AND is done arithmetically (`MaskAnd`) rather than with WinWrap's `And`, which is a logical operator in a Boolean context — relying on it to act bitwise on Longs is how you get a silently empty report.
 - Nothing is written to the model except the optional group.
 
 ## Possible extensions
 
-- **Dependent node with an SPC** — a node dependent on a rigid *and* constrained in a constraint set is the same class of Nastran fatal.
-- **Dependent-and-independent** — a node dependent on one rigid and independent on another is legal but a chained-rigid smell.
+- **Dependent grid with an SPC** — a grid dependent on a rigid *and* constrained in a constraint set is the same class of Nastran fatal.
+- **Dependent-and-independent** — a grid dependent on one rigid and independent on another is legal but a chained-rigid smell.
 - **RBAR / RROD / RBE1 coverage**, once `vRigidBarDOFs` and `RigidRodDependentDof` are confirmed against live elements. `FTO_RIGIDRODLINE2` / `FTO_RIGIDBARLINE2` have no documented numeric values and would need reading from `feConstants` at runtime.
 - **Feed this into *Point RBE2 Spiders*** to screen candidate legs before building, which is the extension already logged there.

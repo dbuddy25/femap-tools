@@ -1,11 +1,15 @@
-' Check Rigid Dependent DOF.bas
+' Check Rigid Dependent Grids.bas
 ' -----------------------------------------------------------------------------
-' Model QA: find rigid elements that fight over the same DEPENDENT DOF.
+' Model QA: find rigid elements that fight over the same DEPENDENT GRID + DOF.
 '
-' Nastran rejects a deck where the same (node, DOF) is dependent on more than
-' one rigid. The check is deliberately at NODE + DOF level, not node level: a
-' node may legally be dependent on one RBE2 for 123 and another for 456, and a
-' node-level check would report that as an error every time.
+' Nastran rejects a deck where the same (grid, DOF) is dependent on more than
+' one rigid. The check is deliberately at GRID + DOF level, not grid level: a
+' grid may legally be dependent on one RBE2 for 123 and another for 456, and a
+' grid-level check would report that as an error every time.
+'
+' Femap calls grids "nodes", so the API terms below - node lists, node(0),
+' GetNodeList - are the Femap spelling of the same thing. User-facing output
+' says grid.
 '
 ' HOW EACH ELEMENT IS READ
 ' Femap has ONE rigid element type (FET_L_RIGID = 29). RBE2 and RBE3 are told
@@ -59,7 +63,7 @@ Sub Main
     ' ============================================================
     ' Section 1: Options
     ' ============================================================
-    Begin Dialog OptDlg 330, 232, "Check Rigid Dependent DOF"
+    Begin Dialog OptDlg 330, 232, "Check Rigid Dependent Grids"
         GroupBox 12, 8, 306, 64, "Elements To Check"
         OptionGroup .scopeMode
             OptionButton 22, 26, 286, 12, "All rigid elements in the model"
@@ -178,7 +182,7 @@ Sub Main
                         App.feAppMessage(FCM_NORMAL, "     node list count = " + Trim$(Str$(nlCount)))
                         For i = 0 To nlCount - 1
                             If i < 3 Then
-                                dumpLine = "     list[" + Trim$(Str$(i)) + "] node " _
+                                dumpLine = "     list[" + Trim$(Str$(i)) + "] grid " _
                                          + Trim$(Str$(CLng(vNode(i)))) + "  dof ="
                                 For d = 0 To 5
                                     dumpLine = dumpLine + " " + Trim$(Str$(CLng(vDof(i * 6 + d))))
@@ -293,7 +297,7 @@ Sub Main
                         badElemSet.Add(entElem(i))
                         badElemSet.Add(entElem(j))
                         App.feAppMessage(FCM_ERROR, _
-                            "Node " + Trim$(Str$(entNode(i))) _
+                            "Grid " + Trim$(Str$(entNode(i))) _
                             + "  DOF " + MaskText(overlap) _
                             + "  dependent on elements " + Trim$(Str$(entElem(i))) _
                             + " and " + Trim$(Str$(entElem(j))))
@@ -343,7 +347,7 @@ Sub Main
     ' Section 6: Report
     ' ============================================================
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
-    App.feAppMessage(FCM_HIGHLIGHT, "  Check Rigid Dependent DOF - Summary")
+    App.feAppMessage(FCM_HIGHLIGHT, "  Check Rigid Dependent Grids - Summary")
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
     App.feAppMessage(FCM_NORMAL, "  Elements examined:     " + Trim$(Str$(elSet.Count)))
     App.feAppMessage(FCM_NORMAL, "  RBE2 checked:          " + Trim$(Str$(nRBE2)) + "   (" + Trim$(Str$(nRBE2Ent)) + " dependent DOF entries)")
@@ -352,7 +356,7 @@ Sub Main
 
     If conflicts > 0 Then
         App.feAppMessage(FCM_ERROR, "  CONFLICTS:             " + Trim$(Str$(conflicts)) _
-            + "  on " + Trim$(Str$(badNodes)) + " node(s)")
+            + "  on " + Trim$(Str$(badNodes)) + " grid(s)")
         App.feAppMessage(FCM_ERROR, "  Elements involved:     " + Trim$(Str$(badElemSet.Count)))
         If grpID > 0 Then
             App.feAppMessage(FCM_NORMAL, "  Group created:         " + Trim$(Str$(grpID)))
