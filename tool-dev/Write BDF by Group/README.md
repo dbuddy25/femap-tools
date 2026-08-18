@@ -36,6 +36,12 @@ Step 3 exists because `sao.SkipStandard = True` would do it natively but **drops
 | `CORD2C` / `CORD2S` | Only when CID is 1 or 2 (Femap's globals). User systems survive. |
 | `ENDDATA` | Replaced with `$` |
 
+### Comments
+
+`$` comment lines are **kept** — Femap's `$ Femap Property 1 : Plate` labels are worth having in the include file.
+
+Femap writes a label *above* the card it describes, and in practice those labels always sit above real bulk data rather than above the boilerplate. That is exactly why a comment cannot inherit the running skip state: a label introducing a card being kept would be dropped whenever the card before it was dropped. So comments are buffered and released once the following card is known to survive — a label shares the fate of the card it introduces, and no orphans are left behind.
+
 Every export prints a tally of what it removed:
 
 ```

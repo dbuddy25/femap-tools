@@ -207,9 +207,29 @@ Function FixFile(fileName As String, dropSummary As String) As Boolean
             Set writeNew = fso.CreateTextFile(newFileName, True)
 
             ' --- copy the bulk data, dropping the dummy-analysis cards --------
+            '
+            ' Femap writes its "$ ..." label BEFORE the card it describes, so a
+            ' comment cannot simply inherit the running skip state - doing that
+            ' loses the label of a KEPT card whenever the preceding card was
+            ' dropped. Comments are therefore buffered and released only once
+            ' the following card is known to survive, so a label shares the fate
+            ' of the card it introduces. Trailing comments are flushed at EOF.
+            Dim pend() As String
+            Dim nPend As Long
+            Dim pi As Long
+            ReDim pend(63)
+            nPend = 0
+
             skipping = False
             Do While Not readOld.AtEndOfStream
                         textLine = readOld.ReadLine
+
+                        If Left(LTrim(textLine), 1) = "$" Then
+                                    If nPend > UBound(pend) Then ReDim Preserve pend(nPend * 2)
+                                    pend(nPend) = textLine
+                                    nPend = nPend + 1
+                        Else
+                        ' --- not a comment: a card line or a continuation -----
 
                         If IsNewCard(textLine) Then
                                     cardName = CardNameOf(textLine)
@@ -241,11 +261,27 @@ Function FixFile(fileName As String, dropSummary As String) As Boolean
                                                 skipping = False
                                     End If
 
-                                    If Not skipping Then nKept = nKept + 1
+                                    If skipping Then
+                                                ' The buffered label belongs to this dropped card.
+                                                nPend = 0
+                                    Else
+                                                nKept = nKept + 1
+                                                For pi = 0 To nPend - 1
+                                                            writeNew.WriteLine pend(pi)
+                                                Next pi
+                                                nPend = 0
+                                    End If
                         End If
 
                         If Not skipping Then writeNew.WriteLine textLine
+
+                        End If
             Loop
+
+            ' Any comments after the last card (Femap's trailing banner).
+            For pi = 0 To nPend - 1
+                        writeNew.WriteLine pend(pi)
+            Next pi
 
             dropSummary = Trim(Str$(nEigrl)) & " EIGRL, " & _
                           Trim(Str$(nCord)) & " global CORD2C/S, " & _
