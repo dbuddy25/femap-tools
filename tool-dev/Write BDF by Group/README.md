@@ -38,14 +38,18 @@ Step 3 exists because `sao.SkipStandard = True` would do it natively but **drops
 
 ### Comments
 
-`$` comment lines are **kept** — Femap's `$ Femap Property 1 : Plate` labels are worth having in the include file.
+The **Femap provenance banner** — the leading `$` block carrying the Femap version, source model and export date — is carried over to the top of the `.bdf`. It sits before `BEGIN BULK`, so the header skip would otherwise discard it, and it is exactly the information an include file should state about its own origin.
+
+Only the *first contiguous* run of comments is taken. Comments further down the header are interleaved with executive/case control and describe the dummy analysis set, which is noise.
+
+`$` comment lines in the bulk data are **kept** too — Femap's `$ Femap Property 1 : Plate` labels are worth having in the include file.
 
 Femap writes a label *above* the card it describes, and in practice those labels always sit above real bulk data rather than above the boilerplate. That is exactly why a comment cannot inherit the running skip state: a label introducing a card being kept would be dropped whenever the card before it was dropped. So comments are buffered and released once the following card is known to survive — a label shares the fate of the card it introduces, and no orphans are left behind.
 
 Every export prints a tally of what it removed:
 
 ```
-Removed: 1 EIGRL, 2 global CORD2C/S, 7 PARAM   (4213 cards kept)
+Removed: 1 EIGRL, 2 global CORD2C/S, 7 PARAM   (4213 cards kept, 6 banner lines carried over)
 ```
 
 That tally exists because the original failure was invisible. If a card type ever starts arriving that shouldn't, the count moves and you can see it — rather than finding out when a deck won't run.

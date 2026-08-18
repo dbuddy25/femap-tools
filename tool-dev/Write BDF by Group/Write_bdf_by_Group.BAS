@@ -188,12 +188,39 @@ Function FixFile(fileName As String, dropSummary As String) As Boolean
             Set readOld = fso.OpenTextFile(fileName, 1)
 
             ' --- skip everything up to and including BEGIN BULK ---------------
+            '
+            ' The leading "$" banner is kept: it carries the Femap version, the
+            ' source model and the export date, which is exactly the provenance
+            ' an INCLUDE file should carry. Only the FIRST contiguous run of
+            ' comments is taken - that is the file header. Comments further down
+            ' are interleaved with executive/case control and describe the dummy
+            ' analysis set, which is noise here.
+            Dim hdr() As String
+            Dim nHdr As Long
+            Dim hi As Long
+            Dim inBanner As Boolean
+            ReDim hdr(63)
+            nHdr = 0
+            inBanner = True
+
             foundBulk = False
             Do While Not readOld.AtEndOfStream
                         textLine = readOld.ReadLine
+
                         If UCase(Left(LTrim(textLine), 10)) = "BEGIN BULK" Then
                                     foundBulk = True
                                     Exit Do
+                        End If
+
+                        If inBanner Then
+                                    If Left(LTrim(textLine), 1) = "$" Then
+                                                If nHdr > UBound(hdr) Then ReDim Preserve hdr(nHdr * 2)
+                                                hdr(nHdr) = textLine
+                                                nHdr = nHdr + 1
+                                    ElseIf Len(Trim(textLine)) > 0 Then
+                                                ' first real card ends the banner
+                                                inBanner = False
+                                    End If
                         End If
             Loop
 
@@ -205,6 +232,11 @@ Function FixFile(fileName As String, dropSummary As String) As Boolean
             Dim newFileName As String   'This file will be the final file for the user
             newFileName = fileName & ".bdf"
             Set writeNew = fso.CreateTextFile(newFileName, True)
+
+            ' Provenance banner first, so the include file says where it came from.
+            For hi = 0 To nHdr - 1
+                        writeNew.WriteLine hdr(hi)
+            Next hi
 
             ' --- copy the bulk data, dropping the dummy-analysis cards --------
             '
@@ -286,7 +318,8 @@ Function FixFile(fileName As String, dropSummary As String) As Boolean
             dropSummary = Trim(Str$(nEigrl)) & " EIGRL, " & _
                           Trim(Str$(nCord)) & " global CORD2C/S, " & _
                           Trim(Str$(nParam)) & " PARAM   (" & _
-                          Trim(Str$(nKept)) & " cards kept)"
+                          Trim(Str$(nKept)) & " cards kept, " & _
+                          Trim(Str$(nHdr)) & " banner lines carried over)"
 
             readOld.Close
             writeNew.Close
