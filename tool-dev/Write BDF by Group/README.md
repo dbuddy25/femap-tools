@@ -52,14 +52,14 @@ The **Femap provenance banner** — Femap version, source model, export date —
 
 **Every** comment line before `BEGIN BULK` is taken. A first attempt kept only the leading contiguous `$` block, assuming the banner sat at the very top — it doesn't, and nothing was captured at all. Femap wraps executive control (`ID` / `SOL` / `CEND`) around the comments, so the only reliable rule is "a comment in the header is header text". If that pulls in a line you don't want, it's a filter on a known string, not a positional guess.
 
-`$` comment lines in the bulk data are **kept** too — Femap's `$ Femap Property 1 : Plate` labels are worth having in the include file.
+`$` comment lines in the bulk data are **kept unconditionally** — every one, no exceptions.
 
-Femap writes a label *above* the card it describes, and in practice those labels always sit above real bulk data rather than above the boilerplate. That is exactly why a comment cannot inherit the running skip state: a label introducing a card being kept would be dropped whenever the card before it was dropped. So comments are buffered and released once the following card is known to survive — a label shares the fate of the card it introduces, and no orphans are left behind.
+Femap's labels sit above real bulk data, so there is nothing to gain by deciding which to drop. An intermediate version buffered comments and let each share the fate of the card below it; that could only ever lose text that was wanted. A stray label above a removed `PARAM` is harmless — a missing label is not.
 
 Every export prints a tally of what it removed:
 
 ```
-Removed: 1 EIGRL, 2 global CORD2C/S, 7 PARAM   (4213 cards kept, 6 banner lines carried over)
+Removed: 1 EIGRL, 2 global CORD2C/S, 7 PARAM   (4213 cards kept, 6 header + 812 inline comments kept)
 ```
 
 That tally exists because the original failure was invisible. If a card type ever starts arriving that shouldn't, the count moves and you can see it — rather than finding out when a deck won't run.

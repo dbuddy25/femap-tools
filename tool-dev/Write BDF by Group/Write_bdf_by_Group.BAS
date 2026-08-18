@@ -195,7 +195,9 @@ Function FixFile(fileName As String, customHdr As String, dropSummary As String)
             ' GRID went missing unnoticed is that this stage never said what it
             ' had taken out.
             Dim nEigrl As Long, nCord As Long, nParam As Long, nKept As Long
+            Dim nComment As Long
             nEigrl = 0 : nCord = 0 : nParam = 0 : nKept = 0
+            nComment = 0
 
             FixFile = False
             dropSummary = ""
@@ -265,26 +267,19 @@ Function FixFile(fileName As String, customHdr As String, dropSummary As String)
 
             ' --- copy the bulk data, dropping the dummy-analysis cards --------
             '
-            ' Femap writes its "$ ..." label BEFORE the card it describes, so a
-            ' comment cannot simply inherit the running skip state - doing that
-            ' loses the label of a KEPT card whenever the preceding card was
-            ' dropped. Comments are therefore buffered and released only once
-            ' the following card is known to survive, so a label shares the fate
-            ' of the card it introduces. Trailing comments are flushed at EOF.
-            Dim pend() As String
-            Dim nPend As Long
-            Dim pi As Long
-            ReDim pend(63)
-            nPend = 0
-
+            ' EVERY comment line is kept, unconditionally. Femap's "$ ..." labels
+            ' sit above real bulk data, so there is nothing to gain by deciding
+            ' which ones to drop - and an earlier version that tried to (letting
+            ' a comment share the fate of the following card) could only ever
+            ' lose text that was wanted. A stray label above a removed PARAM is
+            ' harmless; a missing label is not.
             skipping = False
             Do While Not readOld.AtEndOfStream
                         textLine = readOld.ReadLine
 
                         If Left(LTrim(textLine), 1) = "$" Then
-                                    If nPend > UBound(pend) Then ReDim Preserve pend(nPend * 2)
-                                    pend(nPend) = textLine
-                                    nPend = nPend + 1
+                                    writeNew.WriteLine textLine
+                                    nComment = nComment + 1
                         Else
                         ' --- not a comment: a card line or a continuation -----
 
@@ -318,16 +313,7 @@ Function FixFile(fileName As String, customHdr As String, dropSummary As String)
                                                 skipping = False
                                     End If
 
-                                    If skipping Then
-                                                ' The buffered label belongs to this dropped card.
-                                                nPend = 0
-                                    Else
-                                                nKept = nKept + 1
-                                                For pi = 0 To nPend - 1
-                                                            writeNew.WriteLine pend(pi)
-                                                Next pi
-                                                nPend = 0
-                                    End If
+                                    If Not skipping Then nKept = nKept + 1
                         End If
 
                         If Not skipping Then writeNew.WriteLine textLine
@@ -335,16 +321,12 @@ Function FixFile(fileName As String, customHdr As String, dropSummary As String)
                         End If
             Loop
 
-            ' Any comments after the last card (Femap's trailing banner).
-            For pi = 0 To nPend - 1
-                        writeNew.WriteLine pend(pi)
-            Next pi
-
             dropSummary = Trim(Str$(nEigrl)) & " EIGRL, " & _
                           Trim(Str$(nCord)) & " global CORD2C/S, " & _
                           Trim(Str$(nParam)) & " PARAM   (" & _
                           Trim(Str$(nKept)) & " cards kept, " & _
-                          Trim(Str$(nHdr)) & " banner lines carried over)"
+                          Trim(Str$(nHdr)) & " header + " & _
+                          Trim(Str$(nComment)) & " inline comments kept)"
 
             readOld.Close
             writeNew.Close
