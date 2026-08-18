@@ -27,11 +27,28 @@ Step 3 exists because `sao.SkipStandard = True` would do it natively but **drops
 - `CORD2C`/`CORD2S` are dropped **only when CID is 1 or 2** (Femap's global cylindrical/spherical). The old positional skip would take whatever sat in those line slots — including a user coordinate system
 - `FixFile` returns a status; on failure the temp file is **kept** and an error is printed, instead of deleting the only evidence
 
-## Unverified
+### Cards removed
 
-The strip logic was translated from the original's line counts without ever seeing a real output file. It is correct **if** the original author's assumptions were right and complete. If Femap also emits some other boilerplate card that the old count happened to swallow, the new name-based filter would now pass it through.
+| Card | Rule |
+|---|---|
+| `EIGRL` | Always — from the dummy Modes analysis set |
+| `PARAM` | Always — solution parameters belong in the master deck, not an `INCLUDE` |
+| `CORD2C` / `CORD2S` | Only when CID is 1 or 2 (Femap's globals). User systems survive. |
+| `ENDDATA` | Replaced with `$` |
 
-**To verify:** comment out `DeleteTempFile`, run on a small group, and compare the temp file against the `.bdf`.
+Every export prints a tally of what it removed:
+
+```
+Removed: 1 EIGRL, 2 global CORD2C/S, 7 PARAM   (4213 cards kept)
+```
+
+That tally exists because the original failure was invisible. If a card type ever starts arriving that shouldn't, the count moves and you can see it — rather than finding out when a deck won't run.
+
+## Verifying against a real file
+
+The strip logic was translated from the original's line counts without sight of a real output file. `PARAM` was found this way — the old fixed skip removed the PARAMs as a side effect, and the first name-filter version passed them straight through.
+
+**To check for anything else:** comment out `DeleteTempFile`, run on a small group, and diff the temp file against the `.bdf`. Everything in the difference should be `EIGRL`, `PARAM`, the two global `CORD2i`, or header.
 
 ## Known gaps (not yet fixed)
 

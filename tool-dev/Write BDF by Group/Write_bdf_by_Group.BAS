@@ -104,6 +104,7 @@ End If
 sao.NasBulkLargeField = UserFormat
 
             Dim fixOK As Boolean
+            Dim dropInfo As String
 
             'Loop reads out all group info seperately
             While gr.NextInSet( grSet.ID ) = FE_OK
@@ -124,10 +125,11 @@ sao.NasBulkLargeField = UserFormat
                                                                         App.feFileWriteNastran(8,grFileName)  '8 for nx
                                                                         App.feAppMessage(FCM_COMMAND,"Wrote Original Nastran file: " & grFileName )
 
-                                    fixOK = FixFile(grFileName) 'Funciton that writes correct data to new final file
+                                    fixOK = FixFile(grFileName, dropInfo) 'Funciton that writes correct data to new final file
 
                                     If fixOK Then
                                                 App.feAppMessage(FCM_COMMAND,"Replaced lines and saved as bdf: " & grFileName & ".bdf")
+                                                App.feAppMessage(FCM_COMMAND,"  Removed: " & dropInfo)
                                                 DeleteTempFile(grFileName)  'Function that deletes the temporary file
                                                 App.feAppMessage(FCM_COMMAND,"Deleted original file: " & grFileName)
                                     Else
@@ -161,7 +163,7 @@ End Sub
 ' Now nothing is counted. The header ends at BEGIN BULK, which is definitional,
 ' and the unwanted cards are removed by NAME with their continuation lines.
 ' -----------------------------------------------------------------------------
-Function FixFile(fileName As String) As Boolean
+Function FixFile(fileName As String, dropSummary As String) As Boolean
 
             Dim fso As Object
             Dim readOld As Object
@@ -172,7 +174,15 @@ Function FixFile(fileName As String) As Boolean
             Dim skipping As Boolean
             Dim foundBulk As Boolean
 
+            ' Tally of what was removed. Printed after every export so that a
+            ' card type arriving unexpectedly is VISIBLE. The whole reason a
+            ' GRID went missing unnoticed is that this stage never said what it
+            ' had taken out.
+            Dim nEigrl As Long, nCord As Long, nParam As Long, nKept As Long
+            nEigrl = 0 : nCord = 0 : nParam = 0 : nKept = 0
+
             FixFile = False
+            dropSummary = ""
 
             Set fso = CreateObject("Scripting.FileSystemObject")
             Set readOld = fso.OpenTextFile(fileName, 1)
@@ -211,6 +221,14 @@ Function FixFile(fileName As String) As Boolean
                                     ElseIf cardName = "EIGRL" Then
                                                 ' from the dummy Modes analysis set
                                                 skipping = True
+                                                nEigrl = nEigrl + 1
+                                    ElseIf cardName = "PARAM" Then
+                                                ' Solution parameters belong in the master deck, not in
+                                                ' an INCLUDE file. The old line-counting version removed
+                                                ' these as a side effect of its fixed skip; the name
+                                                ' filter has to drop them deliberately.
+                                                skipping = True
+                                                nParam = nParam + 1
                                     ElseIf cardName = "CORD2C" Or cardName = "CORD2S" Then
                                                 ' Only Femap's two global systems (CID 1 = cylindrical,
                                                 ' 2 = spherical) are boilerplate. A user coordinate
@@ -218,13 +236,21 @@ Function FixFile(fileName As String) As Boolean
                                                 ' would have dropped one that landed in those slots.
                                                 cid = FieldTwo(textLine)
                                                 skipping = (cid = "1" Or cid = "2")
+                                                If skipping Then nCord = nCord + 1
                                     Else
                                                 skipping = False
                                     End If
+
+                                    If Not skipping Then nKept = nKept + 1
                         End If
 
                         If Not skipping Then writeNew.WriteLine textLine
             Loop
+
+            dropSummary = Trim(Str$(nEigrl)) & " EIGRL, " & _
+                          Trim(Str$(nCord)) & " global CORD2C/S, " & _
+                          Trim(Str$(nParam)) & " PARAM   (" & _
+                          Trim(Str$(nKept)) & " cards kept)"
 
             readOld.Close
             writeNew.Close
