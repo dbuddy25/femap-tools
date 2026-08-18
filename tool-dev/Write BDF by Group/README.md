@@ -36,11 +36,21 @@ Step 3 exists because `sao.SkipStandard = True` would do it natively but **drops
 | `CORD2C` / `CORD2S` | Only when CID is 1 or 2 (Femap's globals). User systems survive. |
 | `ENDDATA` | Replaced with `$` |
 
-### Comments
+### Custom header comments
 
-The **Femap provenance banner** — the leading `$` block carrying the Femap version, source model and export date — is carried over to the top of the `.bdf`. It sits before `BEGIN BULK`, so the header skip would otherwise discard it, and it is exactly the information an include file should state about its own origin.
+The options dialog has three optional free-text lines. Whatever you type lands at the very top of every exported `.bdf`, above Femap's own banner — analyst, purpose, revision, job number, whatever the job needs.
 
-Only the *first contiguous* run of comments is taken. Comments further down the header are interleaved with executive/case control and describe the dummy analysis set, which is noise.
+- A `$` is added automatically if you don't type one, so a stray line can never become a bad card
+- A `$ Exported from group: <title>` line is always appended, so each file names its own source group
+- The lines are re-evaluated per group, so the group name is right in every file
+
+Three single-line boxes rather than one multiline box: every `TextBox` in this toolset is single-line, and this is not the script to try unproven dialog syntax on.
+
+### Femap comments
+
+The **Femap provenance banner** — Femap version, source model, export date — is carried over to the top of the `.bdf`. It sits before `BEGIN BULK`, so the header skip would otherwise discard it, and it is exactly the information an include file should state about its own origin.
+
+**Every** comment line before `BEGIN BULK` is taken. A first attempt kept only the leading contiguous `$` block, assuming the banner sat at the very top — it doesn't, and nothing was captured at all. Femap wraps executive control (`ID` / `SOL` / `CEND`) around the comments, so the only reliable rule is "a comment in the header is header text". If that pulls in a line you don't want, it's a filter on a known string, not a positional guess.
 
 `$` comment lines in the bulk data are **kept** too — Femap's `$ Femap Property 1 : Plate` labels are worth having in the include file.
 

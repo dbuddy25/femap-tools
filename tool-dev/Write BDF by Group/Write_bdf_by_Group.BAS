@@ -81,15 +81,22 @@ grSet.SelectMultiID(FT_GROUP,1,"Select Group(s)")
 
 'Promts user for field format
 Dim UserFormat As Integer
-Begin Dialog UserDialog 400,303,"Options" 'NasBulkLargeField %GRID:10,7,1,1
+Begin Dialog UserDialog 400,350,"Options" 'NasBulkLargeField %GRID:10,7,1,1
             GroupBox 5,0,300,100,"Select Field Format",.GroupBox1
                         ListBox 20,21,200,75,FFormat(),.ListBox1
             GroupBox 5,120,300,70,"Is Group Name already the bdf file Name?",.GroupBox2
                         OptionGroup.Group1
                         OptionButton 50,135,150,21,"No",.OptionButton1
                         OptionButton 50,160,150,21,"Yes",.OptionButton2
-            OKButton 70,205,120,35
-            CancelButton 220,205,120,35
+            ' Three single-line boxes rather than one multiline box: every
+            ' TextBox in this toolset is single-line, and this is not the script
+            ' to try unproven dialog syntax on.
+            GroupBox 5,196,385,92,"Custom header comments (optional)",.GroupBox3
+                        TextBox 15,214,365,18,.hdr1
+                        TextBox 15,236,365,18,.hdr2
+                        TextBox 15,258,365,18,.hdr3
+            OKButton 70,300,120,35
+            CancelButton 220,300,120,35
 End Dialog
 Dim dlg As UserDialog
 UserFormat = Dialog(dlg)
@@ -105,6 +112,7 @@ sao.NasBulkLargeField = UserFormat
 
             Dim fixOK As Boolean
             Dim dropInfo As String
+            Dim customHdr As String
 
             'Loop reads out all group info seperately
             While gr.NextInSet( grSet.ID ) = FE_OK
@@ -125,7 +133,15 @@ sao.NasBulkLargeField = UserFormat
                                                                         App.feFileWriteNastran(8,grFileName)  '8 for nx
                                                                         App.feAppMessage(FCM_COMMAND,"Wrote Original Nastran file: " & grFileName )
 
-                                    fixOK = FixFile(grFileName, dropInfo) 'Funciton that writes correct data to new final file
+                                    ' Custom header lines, rebuilt per group so the group
+                                    ' name is right. Chr$(10) separated; FixFile splits it.
+                                    customHdr = ""
+                                    If Trim(dlg.hdr1) <> "" Then customHdr = customHdr & AsComment(dlg.hdr1) & Chr$(10)
+                                    If Trim(dlg.hdr2) <> "" Then customHdr = customHdr & AsComment(dlg.hdr2) & Chr$(10)
+                                    If Trim(dlg.hdr3) <> "" Then customHdr = customHdr & AsComment(dlg.hdr3) & Chr$(10)
+                                    customHdr = customHdr & "$ Exported from group: " & gr.title & Chr$(10)
+
+                                    fixOK = FixFile(grFileName, customHdr, dropInfo) 'Funciton that writes correct data to new final file
 
                                     If fixOK Then
                                                 App.feAppMessage(FCM_COMMAND,"Replaced lines and saved as bdf: " & grFileName & ".bdf")
@@ -163,7 +179,7 @@ End Sub
 ' Now nothing is counted. The header ends at BEGIN BULK, which is definitional,
 ' and the unwanted cards are removed by NAME with their continuation lines.
 ' -----------------------------------------------------------------------------
-Function FixFile(fileName As String, dropSummary As String) As Boolean
+Function FixFile(fileName As String, customHdr As String, dropSummary As String) As Boolean
 
             Dim fso As Object
             Dim readOld As Object
@@ -189,19 +205,21 @@ Function FixFile(fileName As String, dropSummary As String) As Boolean
 
             ' --- skip everything up to and including BEGIN BULK ---------------
             '
-            ' The leading "$" banner is kept: it carries the Femap version, the
-            ' source model and the export date, which is exactly the provenance
-            ' an INCLUDE file should carry. Only the FIRST contiguous run of
-            ' comments is taken - that is the file header. Comments further down
-            ' are interleaved with executive/case control and describe the dummy
-            ' analysis set, which is noise here.
+            ' The "$" banner is kept: it carries the Femap version, the source
+            ' model and the export date, which is exactly the provenance an
+            ' INCLUDE file should carry.
+            '
+            ' EVERY comment before BEGIN BULK is taken, not just the leading run.
+            ' A first attempt captured only the first contiguous block of "$"
+            ' lines, on the assumption the banner sat at the very top - it does
+            ' not, and nothing was captured at all. Femap puts executive control
+            ' (ID / SOL / CEND) around the comments, so the only reliable rule is
+            ' "a comment line in the header is header text".
             Dim hdr() As String
             Dim nHdr As Long
             Dim hi As Long
-            Dim inBanner As Boolean
             ReDim hdr(63)
             nHdr = 0
-            inBanner = True
 
             foundBulk = False
             Do While Not readOld.AtEndOfStream
@@ -212,15 +230,10 @@ Function FixFile(fileName As String, dropSummary As String) As Boolean
                                     Exit Do
                         End If
 
-                        If inBanner Then
-                                    If Left(LTrim(textLine), 1) = "$" Then
-                                                If nHdr > UBound(hdr) Then ReDim Preserve hdr(nHdr * 2)
-                                                hdr(nHdr) = textLine
-                                                nHdr = nHdr + 1
-                                    ElseIf Len(Trim(textLine)) > 0 Then
-                                                ' first real card ends the banner
-                                                inBanner = False
-                                    End If
+                        If Left(LTrim(textLine), 1) = "$" Then
+                                    If nHdr > UBound(hdr) Then ReDim Preserve hdr(nHdr * 2)
+                                    hdr(nHdr) = textLine
+                                    nHdr = nHdr + 1
                         End If
             Loop
 
@@ -233,7 +246,19 @@ Function FixFile(fileName As String, dropSummary As String) As Boolean
             newFileName = fileName & ".bdf"
             Set writeNew = fso.CreateTextFile(newFileName, True)
 
-            ' Provenance banner first, so the include file says where it came from.
+            ' Custom lines first - they are what the analyst wants read first -
+            ' then Femap's own provenance banner.
+            Dim custLines() As String
+            Dim ci As Long
+            If Len(Trim(customHdr)) > 0 Then
+                        custLines = Split(customHdr, Chr$(10))
+                        For ci = 0 To UBound(custLines)
+                                    If Len(Trim(custLines(ci))) > 0 Then
+                                                writeNew.WriteLine custLines(ci)
+                                    End If
+                        Next ci
+            End If
+
             For hi = 0 To nHdr - 1
                         writeNew.WriteLine hdr(hi)
             Next hi
@@ -379,6 +404,20 @@ Function FieldTwo(ln As String) As String
                         FieldTwo = Trim(Mid(padded, 9, 16))   'large field
             Else
                         FieldTwo = Trim(Mid(padded, 9, 8))    'small field
+            End If
+End Function
+
+' -----------------------------------------------------------------------------
+' Make a user-typed line safe to write into bulk data: it must be a comment.
+' A line the user already started with "$" is left as-is.
+' -----------------------------------------------------------------------------
+Function AsComment(ln As String) As String
+            Dim s As String
+            s = Trim(ln)
+            If Left(s, 1) = "$" Then
+                        AsComment = s
+            Else
+                        AsComment = "$ " & s
             End If
 End Function
 
