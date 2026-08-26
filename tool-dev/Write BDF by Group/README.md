@@ -64,6 +64,60 @@ Removed: 1 EIGRL, 2 global CORD2C/S, 7 PARAM   (4213 cards kept, 6 header + 812 
 
 That tally exists because the original failure was invisible. If a card type ever starts arriving that shouldn't, the count moves and you can see it — rather than finding out when a deck won't run.
 
+## Re-exporting: notes are preserved (2026-08-26)
+
+Exporting a group over an existing `.bdf` no longer wipes what was in its header. The tool reads the file it is about to overwrite, carries the notes forward, and writes this run's custom lines **above** them — so the header reads newest-first, like a log.
+
+Femap's own banner (version / source model / date) and the `Exported from group:` line are **regenerated** every export, not carried, so they always describe the current export rather than accumulating one copy per run.
+
+The resulting header looks like:
+
+```
+$ Revised bracket thickness per ECO-4471          <- typed this run
+$>>> EXPORT NOTES - kept on re-export, newest first
+$ Added CBUSH fasteners at the aft splice         <- typed a previous run
+$ Initial export for the -3 config                <- typed before that
+$<<< END EXPORT NOTES
+$--- FEMAP BANNER - regenerated every export, edits here are lost
+$ ***************************************************
+$   Written by : Femap
+$   Version    : 2306
+$   From Model : C:\work\wing.modfem
+$   Date       : Wed Aug 26 ...
+$ ***************************************************
+$ Exported from group: Aft Splice Bracket
+```
+
+### Why the markers exist
+
+A re-export has to tell *your* notes from *Femap's* banner. The `NOTES_BEGIN` / `NOTES_END` pair makes that exact — take what is between them, discard the rest, no interpretation. Pattern-matching the banner instead would be another guess about a file whose structure has already been guessed wrong three times.
+
+**Editing inside the banner block is pointless** — it's rewritten every export. Put anything you want to survive above `$<<< END EXPORT NOTES`, or type it into the dialog.
+
+### Legacy files (written before this change)
+
+A `.bdf` with no markers falls back to classifying each `$` line, and the rule is deliberately lopsided: a line is dropped **only if it positively matches a shape Femap emits** (`Written by`, `Version`, `Translator`, `From Model`, `Date`, `Output To`, a rule of `***`, or the old `Exported from group:` line). Anything unrecognised is kept.
+
+So the worst case is a stale banner line carried across once — visible, harmless, and self-correcting, since markers exist from that export onward. The opposite bias would silently eat a note you wrote, which is not recoverable. The Messages line flags these runs as `LEGACY file (no markers)` so you can eyeball the header once.
+
+### The header tally is printed every run
+
+```
+Header: 1 new note(s), 2 carried over, 9 Femap banner line(s)   [marked file: 2 note(s) kept, 8 banner line(s) dropped]
+```
+
+Not behind a debug flag, because carrying notes across an overwrite is exactly the kind of thing that fails silently and only gets noticed once the notes are already gone. Each run states what it did:
+
+| Reading | Meaning |
+|---|---|
+| `0 carried over` on a re-export | Nothing was carried — check the previous file actually has the markers |
+| `0 Femap banner line(s)` | The banner was not captured from the temp file |
+| `LEGACY file (no markers)` | First re-export of a pre-2026-08-26 file — eyeball the header once |
+
+### Duplicate notes
+
+Nothing de-duplicates. Re-running an export with the same text still typed in the dialog boxes will stack a second identical line. Clear the boxes on a re-export unless you want a new entry.
+
 ## Verifying against a real file
 
 The strip logic was translated from the original's line counts without sight of a real output file. `PARAM` was found this way — the old fixed skip removed the PARAMs as a side effect, and the first name-filter version passed them straight through.

@@ -14,6 +14,28 @@
 '   cylindrical/spherical). Previously the count-based skip would take whatever
 '   happened to sit in those line positions, including a user coordinate system.
 ' - FixFile reports failure instead of writing a truncated file.
+' 20260826
+' - Re-exporting over an existing .bdf now PRESERVES the notes already in it.
+'   New custom lines are written ABOVE the retained ones, so the header reads
+'   newest-first, while Femap's own banner (version / model / date) and the
+'   "Exported from group" line are regenerated every run.
+' - "Exported from group" moved out of the custom-header block. It was being
+'   written as a user note, so re-exporting the same group would have stacked
+'   an identical copy of that line on every single run.
+' - The header classification is printed to Messages on every export, so a
+'   re-export says out loud how many notes it carried over. Silent carry-over
+'   would be indistinguishable from silent loss.
+
+' -----------------------------------------------------------------------------
+' Header markers. These are written into every exported .bdf and are how a
+' re-export tells the analyst's notes from Femap's regenerated banner. Changing
+' the text of these breaks carry-over for files written by an older build - the
+' file falls back to the legacy path in ExistingNotes rather than losing notes,
+' but it will carry the old banner across once.
+' -----------------------------------------------------------------------------
+Const NOTES_BEGIN As String = "$>>> EXPORT NOTES - kept on re-export, newest first"
+Const NOTES_END   As String = "$<<< END EXPORT NOTES"
+Const BANNER_MARK As String = "$--- FEMAP BANNER - regenerated every export, edits here are lost"
 
 Sub Main
 
@@ -139,9 +161,8 @@ sao.NasBulkLargeField = UserFormat
                                     If Trim(dlg.hdr1) <> "" Then customHdr = customHdr & AsComment(dlg.hdr1) & Chr$(10)
                                     If Trim(dlg.hdr2) <> "" Then customHdr = customHdr & AsComment(dlg.hdr2) & Chr$(10)
                                     If Trim(dlg.hdr3) <> "" Then customHdr = customHdr & AsComment(dlg.hdr3) & Chr$(10)
-                                    customHdr = customHdr & "$ Exported from group: " & gr.title & Chr$(10)
 
-                                    fixOK = FixFile(grFileName, customHdr, dropInfo) 'Funciton that writes correct data to new final file
+                                    fixOK = FixFile(grFileName, customHdr, gr.title, dropInfo, App) 'Funciton that writes correct data to new final file
 
                                     If fixOK Then
                                                 App.feAppMessage(FCM_COMMAND,"Replaced lines and saved as bdf: " & grFileName & ".bdf")
@@ -179,7 +200,7 @@ End Sub
 ' Now nothing is counted. The header ends at BEGIN BULK, which is definitional,
 ' and the unwanted cards are removed by NAME with their continuation lines.
 ' -----------------------------------------------------------------------------
-Function FixFile(fileName As String, customHdr As String, dropSummary As String) As Boolean
+Function FixFile(fileName As String, customHdr As String, grpTitle As String, dropSummary As String, App As Object) As Boolean
 
             Dim fso As Object
             Dim readOld As Object
@@ -246,24 +267,75 @@ Function FixFile(fileName As String, customHdr As String, dropSummary As String)
 
             Dim newFileName As String   'This file will be the final file for the user
             newFileName = fileName & ".bdf"
+
+            ' --- carry the notes out of the .bdf we are about to overwrite ----
+            '
+            ' Read this BEFORE CreateTextFile - that call truncates the file, so
+            ' reading afterwards would always come back empty.
+            Dim oldNotes As String
+            Dim notesReport As String
+            oldNotes = ""
+            notesReport = "no previous file"
+            If fso.FileExists(newFileName) Then
+                        oldNotes = ExistingNotes(fso, newFileName, notesReport)
+            End If
+
             Set writeNew = fso.CreateTextFile(newFileName, True)
 
-            ' Custom lines first - they are what the analyst wants read first -
-            ' then Femap's own provenance banner.
+            ' --- header, newest first -----------------------------------------
+            '
+            '   this run's custom lines
+            '   NOTES_BEGIN
+            '     ... every note carried over from previous exports ...
+            '   NOTES_END
+            '   BANNER_MARK
+            '     Femap's provenance banner + the group line, regenerated
+            '
+            ' The markers are what make re-reading deterministic. Without them a
+            ' re-export has to GUESS which "$" lines were the analyst's and which
+            ' were Femap's, and getting that wrong either loses a note or stacks
+            ' a stale banner forever. See ExistingNotes for the legacy fallback.
             Dim custLines() As String
             Dim ci As Long
+            Dim nNew As Long, nCarried As Long
+            nNew = 0 : nCarried = 0
+
             If Len(Trim(customHdr)) > 0 Then
                         custLines = Split(customHdr, Chr$(10))
                         For ci = 0 To UBound(custLines)
                                     If Len(Trim(custLines(ci))) > 0 Then
                                                 writeNew.WriteLine custLines(ci)
+                                                nNew = nNew + 1
                                     End If
                         Next ci
             End If
 
+            writeNew.WriteLine NOTES_BEGIN
+            If Len(oldNotes) > 0 Then
+                        custLines = Split(oldNotes, Chr$(10))
+                        For ci = 0 To UBound(custLines)
+                                    If Len(Trim(custLines(ci))) > 0 Then
+                                                writeNew.WriteLine custLines(ci)
+                                                nCarried = nCarried + 1
+                                    End If
+                        Next ci
+            End If
+            writeNew.WriteLine NOTES_END
+
+            writeNew.WriteLine BANNER_MARK
             For hi = 0 To nHdr - 1
                         writeNew.WriteLine hdr(hi)
             Next hi
+            writeNew.WriteLine "$ Exported from group: " & grpTitle
+
+            ' Printed every run, not behind a debug flag. Carrying notes across
+            ' an overwrite is the kind of thing that fails silently and is only
+            ' noticed months later, when the notes are already gone - so the run
+            ' states what it did. nCarried = 0 on a re-export means nothing was
+            ' carried; nHdr = 0 means the Femap banner was not captured.
+            App.feAppMessage(FCM_NORMAL, "  Header: " & Trim(Str$(nNew)) & " new note(s), " & _
+                        Trim(Str$(nCarried)) & " carried over, " & _
+                        Trim(Str$(nHdr)) & " Femap banner line(s)   [" & notesReport & "]")
 
             ' --- copy the bulk data, dropping the dummy-analysis cards --------
             '
@@ -406,5 +478,164 @@ End Function
 Function DeleteTempFile(FileToDelete As String)
             SetAttr FileToDelete, vbNormal   'Makes sure it is not in the undeletable view
             Kill FileToDelete    'Deletes file
+
+End Function
+
+' -----------------------------------------------------------------------------
+' Pull the analyst's notes out of an already-exported .bdf so a re-export can
+' carry them forward. Returns them Chr$(10)-separated, oldest ordering preserved.
+'
+' TWO PATHS, and the difference matters:
+'
+' MARKED (written by this build or later) - the NOTES_BEGIN / NOTES_END pair is
+' present, so the answer is exact: take what is between them, discard everything
+' else. No interpretation, no guessing.
+'
+' LEGACY (written by an older build, or hand-made) - there are no markers, so
+' every "$" line in the header has to be classified. The rule is deliberately
+' LOPSIDED: a line is dropped only if it positively matches a shape Femap emits
+' in its banner. Anything unrecognised is KEPT. The failure mode is therefore a
+' stale banner line carried across once - visible, harmless, and self-correcting
+' on the next export because markers exist from then on. The alternative bias
+' would silently eat a note the analyst wrote, which is not recoverable.
+'
+' Reading stops at the first non-comment line. Everything below that is bulk
+' data and none of it is header.
+' -----------------------------------------------------------------------------
+Function ExistingNotes(fso As Object, path As String, report As String) As String
+
+            Dim rd As Object
+            Dim ln As String
+            Dim raw() As String
+            Dim nRaw As Long
+            Dim i As Long
+            Dim marked As Boolean
+            Dim inNotes As Boolean
+            Dim out As String
+            Dim nKept As Long, nDropped As Long
+
+            ReDim raw(255)
+            nRaw = 0
+            marked = False
+            out = ""
+            nKept = 0
+            nDropped = 0
+
+            Set rd = fso.OpenTextFile(path, 1)
+            Do While Not rd.AtEndOfStream
+                        ln = rd.ReadLine
+                        If Left(LTrim(ln), 1) <> "$" Then Exit Do
+                        If nRaw > UBound(raw) Then ReDim Preserve raw(nRaw * 2)
+                        raw(nRaw) = ln
+                        nRaw = nRaw + 1
+                        If Left(ln, Len(NOTES_BEGIN)) = NOTES_BEGIN Then marked = True
+            Loop
+            rd.Close
+
+            If nRaw = 0 Then
+                        report = "previous file had no header"
+                        ExistingNotes = ""
+                        Exit Function
+            End If
+
+            ' In a MARKED file the boundary that matters is BANNER_MARK, not
+            ' NOTES_BEGIN. The previous run wrote its newest notes ABOVE
+            ' NOTES_BEGIN - keeping only what sits between the two markers would
+            ' drop exactly those lines, silently losing one run's notes on every
+            ' re-export. So: keep every comment above BANNER_MARK, drop the
+            ' marker lines themselves, discard everything from BANNER_MARK down.
+            inNotes = True
+            For i = 0 To nRaw - 1
+                        ln = raw(i)
+
+                        If Left(ln, Len(NOTES_BEGIN)) = NOTES_BEGIN Then
+                                    ' marker - not content
+                        ElseIf Left(ln, Len(NOTES_END)) = NOTES_END Then
+                                    ' marker - not content
+                        ElseIf Left(ln, Len(BANNER_MARK)) = BANNER_MARK Then
+                                    inNotes = False
+                        Else
+                                    If marked Then
+                                                If inNotes Then
+                                                            out = out & ln & Chr$(10)
+                                                            nKept = nKept + 1
+                                                Else
+                                                            nDropped = nDropped + 1
+                                                End If
+                                    Else
+                                                ' Legacy: keep unless positively identified as banner.
+                                                If IsBannerLine(ln) Then
+                                                            nDropped = nDropped + 1
+                                                Else
+                                                            out = out & ln & Chr$(10)
+                                                            nKept = nKept + 1
+                                                End If
+                                    End If
+                        End If
+            Next i
+
+            If marked Then
+                        report = "marked file: " & Trim(Str$(nKept)) & " note(s) kept, " & _
+                                 Trim(Str$(nDropped)) & " banner line(s) dropped"
+            Else
+                        report = "LEGACY file (no markers): " & Trim(Str$(nKept)) & " line(s) kept, " & _
+                                 Trim(Str$(nDropped)) & " recognised as banner - check the header once"
+            End If
+
+            ExistingNotes = out
+
+End Function
+
+' -----------------------------------------------------------------------------
+' True only for the comment shapes Femap itself writes into its export banner.
+' Used ONLY on legacy files that predate the markers. Kept deliberately narrow -
+' see ExistingNotes for why the bias runs this way.
+'
+' Femap emits, with varying whitespace:
+'   $ **********************************
+'   $   Written by : Femap
+'   $   Version    : 2306
+'   $   Translator : Simcenter Nastran
+'   $   From Model : C:\path\model.modfem
+'   $   Date       : Tue Aug 26 ...
+' plus the "Exported from group:" line this tool used to write as a note.
+' -----------------------------------------------------------------------------
+Function IsBannerLine(ln As String) As Boolean
+
+            Dim t As String
+            Dim u As String
+            Dim i As Long
+            Dim c As String
+            Dim allRule As Boolean
+
+            IsBannerLine = False
+            t = Trim(ln)
+            If Left(t, 1) <> "$" Then Exit Function
+
+            t = Trim(Mid(t, 2))
+            If Len(t) = 0 Then Exit Function      ' a bare "$" spacer - not banner
+
+            ' A rule line: nothing after the "$" but * - = or _ characters.
+            allRule = True
+            For i = 1 To Len(t)
+                        c = Mid(t, i, 1)
+                        If c <> "*" And c <> "-" And c <> "=" And c <> "_" Then
+                                    allRule = False
+                                    Exit For
+                        End If
+            Next i
+            If allRule Then
+                        IsBannerLine = True
+                        Exit Function
+            End If
+
+            u = UCase(t)
+            If Left(u, 11) = "WRITTEN BY "        Then IsBannerLine = True
+            If Left(u, 8)  = "VERSION "           Then IsBannerLine = True
+            If Left(u, 11) = "TRANSLATOR "        Then IsBannerLine = True
+            If Left(u, 11) = "FROM MODEL "        Then IsBannerLine = True
+            If Left(u, 5)  = "DATE "              Then IsBannerLine = True
+            If Left(u, 10) = "OUTPUT TO "         Then IsBannerLine = True
+            If Left(u, 20) = "EXPORTED FROM GROUP:" Then IsBannerLine = True
 
 End Function
