@@ -64,6 +64,13 @@ Removed: 1 EIGRL, 2 global CORD2C/S, 7 PARAM   (4213 cards kept, 6 header + 812 
 
 That tally exists because the original failure was invisible. If a card type ever starts arriving that shouldn't, the count moves and you can see it — rather than finding out when a deck won't run.
 
+## Output folder
+
+A checkbox on the options dialog writes the exported files into a subfolder of the model's folder, defaulting to **`Model`** and ticked. A group export drops one file per group, which buries the model file otherwise.
+
+Untick it to write beside the model, as before. The folder is created if it doesn't exist, and the run aborts with a message rather than writing somewhere unexpected if it can't be. A value containing a drive letter (`D:\shared\decks`) is treated as a full path and used as-is, so the same box also handles sending the export somewhere else entirely.
+
+
 ## Re-exporting: notes are preserved (2026-08-26)
 
 Exporting a group over an existing `.bdf` no longer wipes what was in its header. The tool reads the file it is about to overwrite, carries the notes forward, and writes this run's custom lines **above** them — so the header reads newest-first, like a log.
@@ -74,11 +81,9 @@ The resulting header looks like:
 
 ```
 $ Revised bracket thickness per ECO-4471          <- typed this run
-$>>> EXPORT NOTES - kept on re-export, newest first
 $ Added CBUSH fasteners at the aft splice         <- typed a previous run
 $ Initial export for the -3 config                <- typed before that
-$<<< END EXPORT NOTES
-$--- FEMAP BANNER - regenerated every export, edits here are lost
+$--- Femap banner below is regenerated on every export
 $ ***************************************************
 $   Written by : Femap
 $   Version    : 2306
@@ -88,22 +93,35 @@ $ ***************************************************
 $ Exported from group: Aft Splice Bracket
 ```
 
-### Why the markers exist
+### Why there is one marker line
 
-A re-export has to tell *your* notes from *Femap's* banner. The `NOTES_BEGIN` / `NOTES_END` pair makes that exact — take what is between them, discard the rest, no interpretation. Pattern-matching the banner instead would be another guess about a file whose structure has already been guessed wrong three times.
+A re-export has to tell *your* notes from *Femap's* banner. That marker is the boundary: everything above it is a note, everything from it down is regenerated. Exact, no interpretation - pattern-matching the banner instead would be another guess about a file whose structure has already been guessed wrong three times.
 
-**Editing inside the banner block is pointless** — it's rewritten every export. Put anything you want to survive above `$<<< END EXPORT NOTES`, or type it into the dialog.
+It is the **minimum** scaffolding that still works. An earlier version also bracketed the notes with a begin/end pair, which was redundant - the notes are simply whatever precedes the banner - and put three lines of scaffolding into a Nastran deck where one will do. It cannot be dropped entirely without going back to guessing.
 
-### Legacy files (written before this change)
+**Editing below the marker is pointless** - that region is rewritten every export. Put anything you want to survive above it, or type it into the dialog.
+
+
+### Files from the previous build
+
+The first version of this feature used a three-line scheme (`$>>> EXPORT NOTES` / `$<<< END EXPORT NOTES` / `$--- FEMAP BANNER`). Files already exported by it are read correctly, and its scaffolding lines are recognised and dropped rather than carried forward as if they were notes. Nothing to clean up by hand.
+
+### Older files (written before notes were preserved at all)
 
 A `.bdf` with no markers falls back to classifying each `$` line, and the rule is deliberately lopsided: a line is dropped **only if it positively matches a shape Femap emits** (`Written by`, `Version`, `Translator`, `From Model`, `Date`, `Output To`, a rule of `***`, or the old `Exported from group:` line). Anything unrecognised is kept.
 
 So the worst case is a stale banner line carried across once — visible, harmless, and self-correcting, since markers exist from that export onward. The opposite bias would silently eat a note you wrote, which is not recoverable. The Messages line flags these runs as `LEGACY file (no markers)` so you can eyeball the header once.
 
-### The header tally is printed every run
+### The notes are listed in the Messages window every run
+
+The file is where the notes *live*; the Messages window is where you **read** them. Every export echoes the full set, newest first, with this run's additions marked `+`:
 
 ```
-Header: 1 new note(s), 2 carried over, 9 Femap banner line(s)   [marked file: 2 note(s) kept, 8 banner line(s) dropped]
+  Notes in C:\work\Model\Group_Aft Splice Bracket.bdf:
+    + Revised bracket thickness per ECO-4471
+      Added CBUSH fasteners at the aft splice
+      Initial export for the -3 config
+  Notes: 1 new, 2 carried over, 9 Femap banner line(s)   [marked file: 2 note(s) kept, 8 banner line(s) dropped]
 ```
 
 Not behind a debug flag, because carrying notes across an overwrite is exactly the kind of thing that fails silently and only gets noticed once the notes are already gone. Each run states what it did:

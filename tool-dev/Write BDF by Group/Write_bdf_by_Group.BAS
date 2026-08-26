@@ -27,15 +27,31 @@
 '   would be indistinguishable from silent loss.
 
 ' -----------------------------------------------------------------------------
-' Header markers. These are written into every exported .bdf and are how a
-' re-export tells the analyst's notes from Femap's regenerated banner. Changing
-' the text of these breaks carry-over for files written by an older build - the
-' file falls back to the legacy path in ExistingNotes rather than losing notes,
-' but it will carry the old banner across once.
+' The one marker line written into every exported .bdf. It is how a re-export
+' tells the analyst's notes (everything ABOVE it) from Femap's regenerated
+' banner (everything from it DOWN).
+'
+' There is exactly one because one is the minimum that still makes re-reading
+' exact. An earlier version bracketed the notes with a begin/end pair as well,
+' which was redundant - the notes are simply "whatever precedes the banner" -
+' and put three scaffolding lines in a Nastran deck where one will do.
+'
+' It cannot be removed entirely. Without a boundary a re-export has to GUESS
+' which "$" lines were the analyst's and which were Femap's, which is the
+' pattern-matching this design exists to avoid. Changing its text breaks
+' carry-over for files written by an older build: those fall back to the legacy
+' path in ExistingNotes rather than losing notes, but carry the old banner
+' across once.
 ' -----------------------------------------------------------------------------
-Const NOTES_BEGIN As String = "$>>> EXPORT NOTES - kept on re-export, newest first"
-Const NOTES_END   As String = "$<<< END EXPORT NOTES"
-Const BANNER_MARK As String = "$--- FEMAP BANNER - regenerated every export, edits here are lost"
+Const BANNER_MARK As String = "$--- Femap banner below is regenerated on every export"
+
+' Scaffolding written by the 0055a2b build, which used a three-line scheme. Any
+' .bdf already exported by that build carries these, and without recognising
+' them the new reader would classify the two EXPORT NOTES lines as notes and
+' carry them forward forever - exactly the clutter this change removed.
+Const OLD_NOTES_BEGIN As String = "$>>> EXPORT NOTES"
+Const OLD_NOTES_END   As String = "$<<< END EXPORT NOTES"
+Const OLD_BANNER_MARK As String = "$--- FEMAP BANNER"
 
 Sub Main
 
@@ -103,7 +119,7 @@ grSet.SelectMultiID(FT_GROUP,1,"Select Group(s)")
 
 'Promts user for field format
 Dim UserFormat As Integer
-Begin Dialog UserDialog 400,350,"Options" 'NasBulkLargeField %GRID:10,7,1,1
+Begin Dialog UserDialog 400,412,"Options" 'NasBulkLargeField %GRID:10,7,1,1
             GroupBox 5,0,300,100,"Select Field Format",.GroupBox1
                         ListBox 20,21,200,75,FFormat(),.ListBox1
             GroupBox 5,120,300,70,"Is Group Name already the bdf file Name?",.GroupBox2
@@ -117,10 +133,16 @@ Begin Dialog UserDialog 400,350,"Options" 'NasBulkLargeField %GRID:10,7,1,1
                         TextBox 15,214,365,18,.hdr1
                         TextBox 15,236,365,18,.hdr2
                         TextBox 15,258,365,18,.hdr3
-            OKButton 70,300,120,35
-            CancelButton 220,300,120,35
+            GroupBox 5,292,385,64,"Output folder",.GroupBox4
+                        CheckBox 15,308,175,14,"Write into a subfolder:",.chkSub
+                        TextBox  196,306,184,18,.subBox
+                        Text     15,330,365,20,"Relative to the model folder, and created if it does not exist. A full path (one containing a drive letter) is used as-is."
+            OKButton 70,364,120,35
+            CancelButton 220,364,120,35
 End Dialog
 Dim dlg As UserDialog
+dlg.chkSub = 1
+dlg.subBox = "Model"
 UserFormat = Dialog(dlg)
 
 If UserFormat = -1 Then 'user pressed ok
@@ -131,6 +153,45 @@ End If
 
 'Updates field format
 sao.NasBulkLargeField = UserFormat
+
+            ' --- where the files go -------------------------------------------
+            '
+            ' Default is a "Model" subfolder of wherever the model lives, which
+            ' is the usual habit - a group export drops one file per group and
+            ' they bury the model file otherwise. Untick to write beside the
+            ' model as before.
+            '
+            ' A value containing ":" is taken as a full path and used as-is, so
+            ' the same box handles "send it somewhere else entirely" without a
+            ' second control.
+            Dim outPath As String
+            Dim subWanted As String
+            outPath = modelFIlePath
+            subWanted = Trim(dlg.subBox)
+
+            If dlg.chkSub <> 0 And Len(subWanted) > 0 Then
+                        If InStr(subWanted, ":") > 0 Then
+                                    outPath = subWanted
+                        Else
+                                    outPath = modelFIlePath & subWanted
+                        End If
+                        If Right(outPath, 1) <> "\" Then outPath = outPath & "\"
+
+                        Dim fsoDir As Object
+                        Set fsoDir = CreateObject("Scripting.FileSystemObject")
+                        If Not fsoDir.FolderExists(outPath) Then
+                                    On Error Resume Next
+                                    fsoDir.CreateFolder(outPath)
+                                    On Error GoTo 0
+                        End If
+                        If Not fsoDir.FolderExists(outPath) Then
+                                    App.feAppMessage(FCM_ERROR, "Could not create output folder: " & outPath)
+                                    App.feAppMessage(FCM_ERROR, "Nothing was written - exiting")
+                                    Exit Sub
+                        End If
+            End If
+
+            App.feAppMessage(FCM_NORMAL, "Writing to: " & outPath)
 
             Dim fixOK As Boolean
             Dim dropInfo As String
@@ -146,10 +207,10 @@ sao.NasBulkLargeField = UserFormat
 
                                     Select Case dlg.Group1
                                                 Case 0
-                                                            grFileName = modelFIlePath & "Group_" & gr.title 'Sets temp file name
+                                                            grFileName = outPath & "Group_" & gr.title 'Sets temp file name
                                                 Case 1
                                                             job = Split(gr.title,".")
-                                                            grFileName = modelFIlePath & job(0)
+                                                            grFileName = outPath & job(0)
                                     End Select
 
                                                                         App.feFileWriteNastran(8,grFileName)  '8 for nx
@@ -285,13 +346,11 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
             ' --- header, newest first -----------------------------------------
             '
             '   this run's custom lines
-            '   NOTES_BEGIN
-            '     ... every note carried over from previous exports ...
-            '   NOTES_END
+            '   ... every note carried over from previous exports ...
             '   BANNER_MARK
             '     Femap's provenance banner + the group line, regenerated
             '
-            ' The markers are what make re-reading deterministic. Without them a
+            ' The marker is what makes re-reading deterministic. Without it a
             ' re-export has to GUESS which "$" lines were the analyst's and which
             ' were Femap's, and getting that wrong either loses a note or stacks
             ' a stale banner forever. See ExistingNotes for the legacy fallback.
@@ -300,27 +359,29 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
             Dim nNew As Long, nCarried As Long
             nNew = 0 : nCarried = 0
 
+            App.feAppMessage(FCM_HIGHLIGHT, "  Notes in " & newFileName & ":")
+
             If Len(Trim(customHdr)) > 0 Then
                         custLines = Split(customHdr, Chr$(10))
                         For ci = 0 To UBound(custLines)
                                     If Len(Trim(custLines(ci))) > 0 Then
                                                 writeNew.WriteLine custLines(ci)
                                                 nNew = nNew + 1
+                                                App.feAppMessage(FCM_NORMAL, "    + " & custLines(ci))
                                     End If
                         Next ci
             End If
 
-            writeNew.WriteLine NOTES_BEGIN
             If Len(oldNotes) > 0 Then
                         custLines = Split(oldNotes, Chr$(10))
                         For ci = 0 To UBound(custLines)
                                     If Len(Trim(custLines(ci))) > 0 Then
                                                 writeNew.WriteLine custLines(ci)
                                                 nCarried = nCarried + 1
+                                                App.feAppMessage(FCM_NORMAL, "      " & custLines(ci))
                                     End If
                         Next ci
             End If
-            writeNew.WriteLine NOTES_END
 
             writeNew.WriteLine BANNER_MARK
             For hi = 0 To nHdr - 1
@@ -328,12 +389,14 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
             Next hi
             writeNew.WriteLine "$ Exported from group: " & grpTitle
 
-            ' Printed every run, not behind a debug flag. Carrying notes across
-            ' an overwrite is the kind of thing that fails silently and is only
-            ' noticed months later, when the notes are already gone - so the run
-            ' states what it did. nCarried = 0 on a re-export means nothing was
-            ' carried; nHdr = 0 means the Femap banner was not captured.
-            App.feAppMessage(FCM_NORMAL, "  Header: " & Trim(Str$(nNew)) & " new note(s), " & _
+            ' The notes themselves are echoed above, newest first and marked
+            ' "+" - that is where they are meant to be READ. Carrying notes
+            ' across an overwrite fails silently otherwise, and is only noticed
+            ' months later when they are already gone.
+            '
+            ' nCarried = 0 on a re-export means nothing was carried;
+            ' nHdr = 0 means the Femap banner was not captured.
+            App.feAppMessage(FCM_NORMAL, "  Notes: " & Trim(Str$(nNew)) & " new, " & _
                         Trim(Str$(nCarried)) & " carried over, " & _
                         Trim(Str$(nHdr)) & " Femap banner line(s)   [" & notesReport & "]")
 
@@ -487,9 +550,9 @@ End Function
 '
 ' TWO PATHS, and the difference matters:
 '
-' MARKED (written by this build or later) - the NOTES_BEGIN / NOTES_END pair is
-' present, so the answer is exact: take what is between them, discard everything
-' else. No interpretation, no guessing.
+' MARKED (written by this build or later) - BANNER_MARK is present, so the answer
+' is exact: every comment above it is a note, everything from it down is the
+' regenerated banner. No interpretation, no guessing.
 '
 ' LEGACY (written by an older build, or hand-made) - there are no markers, so
 ' every "$" line in the header has to be classified. The rule is deliberately
@@ -528,7 +591,8 @@ Function ExistingNotes(fso As Object, path As String, report As String) As Strin
                         If nRaw > UBound(raw) Then ReDim Preserve raw(nRaw * 2)
                         raw(nRaw) = ln
                         nRaw = nRaw + 1
-                        If Left(ln, Len(NOTES_BEGIN)) = NOTES_BEGIN Then marked = True
+                        If Left(ln, Len(BANNER_MARK)) = BANNER_MARK Then marked = True
+                        If Left(ln, Len(OLD_BANNER_MARK)) = OLD_BANNER_MARK Then marked = True
             Loop
             rd.Close
 
@@ -538,22 +602,22 @@ Function ExistingNotes(fso As Object, path As String, report As String) As Strin
                         Exit Function
             End If
 
-            ' In a MARKED file the boundary that matters is BANNER_MARK, not
-            ' NOTES_BEGIN. The previous run wrote its newest notes ABOVE
-            ' NOTES_BEGIN - keeping only what sits between the two markers would
-            ' drop exactly those lines, silently losing one run's notes on every
-            ' re-export. So: keep every comment above BANNER_MARK, drop the
-            ' marker lines themselves, discard everything from BANNER_MARK down.
+            ' In a MARKED file every comment ABOVE the banner marker is a note,
+            ' and everything from the marker down is the regenerated banner. The
+            ' newest notes sit at the top, so there is no lower bound to find -
+            ' the marker alone splits the header correctly.
             inNotes = True
             For i = 0 To nRaw - 1
                         ln = raw(i)
 
-                        If Left(ln, Len(NOTES_BEGIN)) = NOTES_BEGIN Then
-                                    ' marker - not content
-                        ElseIf Left(ln, Len(NOTES_END)) = NOTES_END Then
-                                    ' marker - not content
-                        ElseIf Left(ln, Len(BANNER_MARK)) = BANNER_MARK Then
+                        If Left(ln, Len(BANNER_MARK)) = BANNER_MARK Then
                                     inNotes = False
+                        ElseIf Left(ln, Len(OLD_BANNER_MARK)) = OLD_BANNER_MARK Then
+                                    inNotes = False
+                        ElseIf Left(ln, Len(OLD_NOTES_BEGIN)) = OLD_NOTES_BEGIN Then
+                                    ' old scaffolding - not content
+                        ElseIf Left(ln, Len(OLD_NOTES_END)) = OLD_NOTES_END Then
+                                    ' old scaffolding - not content
                         Else
                                     If marked Then
                                                 If inNotes Then
