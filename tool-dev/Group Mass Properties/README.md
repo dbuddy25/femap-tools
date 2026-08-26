@@ -2,27 +2,9 @@
 
 Per-group mass, CG and inertia for a set of selected groups, written to one flat Excel table with a totals row.
 
-**Status:** Built — pending in-Femap testing.
-
 ## Use case
 
 Mass-properties reporting across an assembly: pick the groups that make up the parts, get one sortable, filterable table of what each weighs and where its CG sits, plus a combined rollup for the whole selection.
-
-## Replaces
-
-An in-house script last touched in 2016 (`group mass properties calculating and reporting`). It had stopped working and its output was hard to use. Both causes are worth recording.
-
-**Why it broke.** It opened with an early-binding reference:
-
-```
-'#Reference {...}#C:\Program Files (x86)\Microsoft Office\Office14\EXCEL.EXE
-```
-
-A hard dependency on Excel 2010 at exactly that path. Every other Excel tool in this toolset is late-bound (`CreateObject`) specifically so an Office upgrade can't break it — that script was the outlier. This one is late-bound too.
-
-**Why the output was hard to use.** Three tiers of merged header cells, which make a sheet impossible to sort or filter; a "Pt Mass Model Data" block with headers that were never written to in ten years; and one hardcoded `"0.000"` format applied to a fixed `D11:AH200` range — wrong for values spanning orders of magnitude, and silently truncating past row 200.
-
-Also fixed along the way: `CID = 3` was hardcoded, baking one person's coordinate system into a tool shared with colleagues.
 
 ## What it does
 
@@ -57,7 +39,7 @@ Flagged rows are tinted amber. Dropped relative to the old sheet: length/area/vo
 3 = I31 (Izx)    4 = I32 (Iyz)    5 = I33 (Izz)
 ```
 
-So reading Ixx, Iyy, Izz, Ixy, Iyz, Izx means indices **0, 2, 5, 1, 4, 3**. That reads like a typo and is not. The old script had it right; don't "fix" it.
+So reading Ixx, Iyy, Izz, Ixy, Iyz, Izx means indices **0, 2, 5, 1, 4, 3**. That reads like a typo and is not. Don't "fix" it.
 
 ### Per-group inertia is never summed
 
@@ -128,7 +110,7 @@ The Messages summary also reports coverage: how many model elements no selected 
 
 **No live Set cursor across a Femap call.** Group IDs are harvested into arrays before any measuring begins, matching the discipline in `Remove From Groups`.
 
-**One coordinate system for the whole run.** The summability of the about-origin inertias is a direct consequence of that single choice — it is why the old `CID = 3` had to become a user selection rather than simply being deleted.
+**One coordinate system for the whole run.** The summability of the about-origin inertias is a direct consequence of that single choice, which is why it is asked once up front rather than per group.
 
 ## Known gaps
 
