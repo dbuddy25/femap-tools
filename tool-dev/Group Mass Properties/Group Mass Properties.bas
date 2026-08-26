@@ -1,28 +1,10 @@
 ' Group Mass Properties.bas
 ' -----------------------------------------------------------------------------
 ' Per-group mass, CG and inertia for a set of selected groups, written to one
-' flat Excel table with a totals row.
+' flat Excel table with a totals row. Read-only on the model.
 '
-' Replaces an in-house script last touched in 2016. That version was broken and
-' its output was hard to use; both causes are worth recording, because they are
-' the kind of thing that comes back.
-'
-' WHY THE OLD ONE STOPPED WORKING
-' It opened with an early-binding reference:
-'
-'   '#Reference {...}#C:\Program Files (x86)\Microsoft Office\Office14\EXCEL.EXE
-'
-' - a hard dependency on Excel 2010 living at exactly that path. Every other
-' Excel tool in this toolset is LATE bound (CreateObject) precisely so an Office
-' upgrade cannot break it. This one is now too.
-'
-' WHY ITS OUTPUT WAS HARD TO USE
-' Three tiers of merged header cells, which make a sheet impossible to sort or
-' filter; a whole "Pt Mass Model Data" block that had headers but was never
-' written to in ten years; and one hardcoded "0.000" number format applied to a
-' fixed D11:AH200 range - wrong for values spanning orders of magnitude, and
-' silently truncating past row 200. This version is a single header row with
-' AutoFilter, formats chosen per column, and no fixed row cap.
+' Pick the groups, pick the coordinate system, and every group is measured with
+' feMeasureMeshMassProp. Overlapping, empty and zero-mass groups are flagged.
 '
 ' *** THE INERTIA ARRAY PACKING IS NOT WHAT IT LOOKS LIKE ***
 ' feMeasureMeshMassProp returns inertia[0..5] packed LOWER-TRIANGULAR:
@@ -31,10 +13,17 @@
 '   3 = I31 (Izx)    4 = I32 (Iyz)    5 = I33 (Izz)
 '
 ' so reading Ixx,Iyy,Izz,Ixy,Iyz,Izx means indices 0,2,5,1,4,3. That looks like
-' a typo and is not. The old script had this RIGHT - do not "correct" it.
+' a typo and is not. Do not "correct" it.
 '
 ' Two arrays come back: "inertia" is about the ORIGIN of the chosen coordinate
 ' system, "inertiaCG" is about that group's OWN centre of gravity.
+'
+' WHAT IS NOT SUMMABLE
+' Per-group "inertiaCG" values are each about a DIFFERENT point, so summing them
+' is meaningless. The totals row sums the about-ORIGIN arrays instead (all about
+' the same point, so that IS valid) and applies parallel-axis once at the end.
+' This is why the about-origin values are still computed even though the sheet
+' does not show them.
 '
 ' *** THE SIGN CONVENTION IS UNDOCUMENTED, SO THE TOOL MEASURES IT ***
 ' The API guide never says whether Ixy is a PRODUCT OF INERTIA (+integral xy dm)
@@ -52,12 +41,9 @@
 ' corroborates on the other two off-diagonal slots, and reports what it found.
 ' It is never assumed. See Section 6.
 '
-' WHAT IS NOT SUMMABLE
-' Per-group "inertiaCG" values are each about a DIFFERENT point, so summing them
-' is meaningless. The totals row sums the about-ORIGIN arrays instead (all about
-' the same point, so that IS valid) and applies parallel-axis once at the end.
-' This is why the about-origin values are still computed even though the sheet
-' does not show them.
+' The totals are then checked against Femap's own direct measurement of the
+' union of the selected groups (Section 7), which validates the summing, the
+' parallel-axis shift and the detected convention together.
 '
 ' The totals row blanks its CG and inertia cells - rather than printing
 ' something wrong - whenever the selected groups overlap, any group reported
@@ -106,11 +92,10 @@ Sub Main
     ' ============================================================
     ' Section 2: Pick the coordinate system
     '
-    ' The old script had "CID = 3" hardcoded - a coordinate system that happened
-    ' to exist in one person's model, baked into a tool shared with colleagues.
-    ' The dropdown only ever offers IDs read back from THIS model, which also
-    ' sidesteps the fact that the API guide never says what
-    ' feMeasureMeshMassProp does with a coordinate system that does not exist.
+    ' The dropdown only ever offers IDs read back from THIS model, so a
+    ' coordinate system that does not exist cannot be chosen - which matters
+    ' because the API guide never says what feMeasureMeshMassProp does with
+    ' one.
     ' ============================================================
     Dim csEnum As Object
     Set csEnum = App.feCSys
@@ -472,8 +457,8 @@ Sub Main
     wsD.Name = "Mass by Group"
 
     ' Column A and row 1 are left blank as a margin (cleaner screenshots).
-    ' Header on row 2, data from row 3. One header row only - merged headers
-    ' are what made the old sheet impossible to sort or filter.
+    ' Header on row 2, data from row 3. One header row only - merged header
+    ' cells would break sorting and filtering.
     Dim hdrRow As Long, firstRow As Long
     hdrRow = 2
     firstRow = 3
