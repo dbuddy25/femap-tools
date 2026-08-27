@@ -492,6 +492,17 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
             Dim nsmNames As String
             nsmNames = ""
 
+            ' Contact cards are counted the same way, for free - this loop
+            ' already sees every card. Femap's group filter drops NSM, and
+            ' contact regions are Regions too, so the same thing may well happen
+            ' to these. Counting them means the next ordinary export answers
+            ' that, instead of it being found in a deck that solves without its
+            ' contact. Same list as the export-contact-cards tool.
+            Dim nCon As Long
+            Dim conNames As String
+            nCon = 0
+            conNames = ""
+
             FixFile = False
             dropSummary = ""
 
@@ -656,6 +667,13 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
                                                 skipping = False
                                     End If
 
+                                    If IsContactCard(cardName) Then
+                                                nCon = nCon + 1
+                                                If InStr(conNames, " " & cardName & " ") = 0 Then
+                                                            conNames = conNames & " " & cardName & " "
+                                                End If
+                                    End If
+
                                     If Left(cardName, 3) = "NSM" Then
                                                 nNSMseen = nNSMseen + 1
                                                 If Not skipping Then nNSMkept = nNSMkept + 1
@@ -682,6 +700,12 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
                         If InStr(nsmNames, " NSMADD ") = 0 Then
                                     App.feAppMessage(FCM_WARNING, "  No NSMADD - the NSM sets are not combined.")
                         End If
+            End If
+
+            If nCon > 0 Then
+                        App.feAppMessage(FCM_NORMAL, "  Contact cards written: " & Trim(Str$(nCon)) & "  " & conNames)
+            Else
+                        App.feAppMessage(FCM_NORMAL, "  Contact cards written: none")
             End If
 
             dropSummary = Trim(Str$(nEigrl)) & " EIGRL, " & _
@@ -1145,3 +1169,21 @@ Sub SplitCardFields(ln As String, isCont As Boolean, fld() As String, nFld As Lo
             Loop
 
 End Sub
+
+' -----------------------------------------------------------------------------
+' Is this one of the contact/glue bulk data cards?
+'
+' Same list as the export-contact-cards tool, so the two agree on what "contact
+' data" means: surfaces (BSURF/BSURFS), property-based surfaces (BCPROP/
+' BCPROPS), the set and add cards for glue (BGSET/BGADD) and contact
+' (BCTSET/BCTADD), and the parameter card (BGPARM).
+' -----------------------------------------------------------------------------
+Function IsContactCard(cardName As String) As Boolean
+
+            IsContactCard = (cardName = "BSURF" Or cardName = "BSURFS" _
+                        Or cardName = "BCPROP" Or cardName = "BCPROPS" _
+                        Or cardName = "BGSET" Or cardName = "BGADD" _
+                        Or cardName = "BCTSET" Or cardName = "BCTADD" _
+                        Or cardName = "BGPARM")
+
+End Function

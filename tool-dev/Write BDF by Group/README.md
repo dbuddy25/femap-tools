@@ -131,6 +131,23 @@ $ NSM cards below were copied from a whole-model export.
 $ Femap does not write them for a group-filtered export.
 ```
 
+## Does the group filter drop contact too?
+
+Unknown as of 2026-08-27 — untested. But contact regions are Regions, exactly like NSM regions, so there is every reason to expect Femap's group filter treats them the same way.
+
+Rather than guess, every export now counts the contact cards it wrote. It costs nothing: the card loop already sees every line.
+
+```
+  Contact cards written: 14   BSURF  BGSET
+  Contact cards written: none
+```
+
+`none` on a model that definitely has contact is the answer — and it arrives during an ordinary export rather than being discovered in a deck that solves without its glue.
+
+The card list matches [`export-contact-cards`](../export-contact-cards/): `BSURF`, `BSURFS`, `BCPROP`, `BCPROPS`, `BGSET`, `BGADD`, `BCTSET`, `BCTADD`, `BGPARM`.
+
+If it turns out they are dropped, the NSM recovery mechanism generalizes — but not for free. `BSURF`/`BSURFS` list elements and would use the containment test that already exists; `BCPROP`/`BCPROPS` reference properties and need a new one; `BGSET`/`BCTSET`/`BGADD` reference region SIDs, the same shape as `NSMADD`.
+
 ## Header notes
 
 Exporting a group over an existing `.bdf` keeps whatever notes were in its header and writes this run's lines **above** them, so the header reads newest-first, like a log.
