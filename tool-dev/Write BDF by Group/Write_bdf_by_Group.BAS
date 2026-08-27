@@ -27,31 +27,16 @@
 '   would be indistinguishable from silent loss.
 
 ' -----------------------------------------------------------------------------
-' The one marker line written into every exported .bdf. It is how a re-export
-' tells the analyst's notes (everything ABOVE it) from Femap's regenerated
-' banner (everything from it DOWN).
-'
-' There is exactly one because one is the minimum that still makes re-reading
-' exact. An earlier version bracketed the notes with a begin/end pair as well,
-' which was redundant - the notes are simply "whatever precedes the banner" -
-' and put three scaffolding lines in a Nastran deck where one will do.
-'
-' It cannot be removed entirely. Without a boundary a re-export has to GUESS
-' which "$" lines were the analyst's and which were Femap's, which is the
-' pattern-matching this design exists to avoid. Changing its text breaks
-' carry-over for files written by an older build: those fall back to the legacy
-' path in ExistingNotes rather than losing notes, but carry the old banner
-' across once.
+' Markers left in files by earlier builds. Nothing is written now.
 ' -----------------------------------------------------------------------------
-Const BANNER_MARK As String = "$--- Femap banner below is regenerated on every export"
-
-' Scaffolding written by the 0055a2b build, which used a three-line scheme. Any
-' .bdf already exported by that build carries these, and without recognising
-' them the new reader would classify the two EXPORT NOTES lines as notes and
-' carry them forward forever - exactly the clutter this change removed.
+' Scaffolding written by earlier builds. NOTHING is written into the file any
+' more - see ExistingNotes for how the banner is found without a marker - but
+' any .bdf already exported by those builds carries these lines, and without
+' recognising them they would be read back as notes and carried forward forever.
 Const OLD_NOTES_BEGIN As String = "$>>> EXPORT NOTES"
 Const OLD_NOTES_END   As String = "$<<< END EXPORT NOTES"
 Const OLD_BANNER_MARK As String = "$--- FEMAP BANNER"
+Const OLD_BANNER_MK2  As String = "$--- Femap banner below is regenerated"
 
 Sub Main
 
@@ -193,6 +178,30 @@ sao.NasBulkLargeField = UserFormat
 
             App.feAppMessage(FCM_NORMAL, "Writing to: " & outPath)
 
+            ' --- regions in the model, for the NSM check below ----------------
+            '
+            ' *** FT_CONTACT (58) IS A FEMAP *REGION*. FT_CONNECTION (71) IS THE
+            ' *** CONNECTOR (contact pair). The names are the wrong way round
+            ' *** from what you would guess, and picking the wrong one here
+            ' *** silently counts zero regions forever.
+            '
+            ' Nonstructural-mass regions are Regions, not elements. Femap's
+            ' group-filtered write emits only entities that are IN the group
+            ' (NasBulkGroupID), so a group holding the elements but not the
+            ' region gets the section comment and no NSM card - which reads as
+            ' "the NSM went missing" when nothing is actually broken.
+            Dim regAll As femap.Set
+            Set regAll = App.feSet
+            regAll.Clear
+            rc = regAll.AddAll(FT_CONTACT)
+            Dim nRegModel As Long
+            nRegModel = regAll.Count
+
+            Dim regGrp As femap.Set
+            Set regGrp = App.feSet
+            Dim nRegMissing As Long
+            nRegMissing = 0
+
             Dim fixOK As Boolean
             Dim dropInfo As String
             Dim customHdr As String
@@ -215,6 +224,21 @@ sao.NasBulkLargeField = UserFormat
 
                                                                         App.feFileWriteNastran(8,grFileName)  '8 for nx
                                                                         App.feAppMessage(FCM_COMMAND,"Wrote Original Nastran file: " & grFileName )
+
+                                    ' --- does this group carry its regions? ---
+                                    If nRegModel > 0 Then
+                                                regGrp.Clear
+                                                rc = regGrp.AddGroup(FT_CONTACT, gr.ID)
+                                                If regGrp.Count = 0 Then
+                                                            nRegMissing = nRegMissing + 1
+                                                            App.feAppMessage(FCM_WARNING, _
+                                                                        "  No regions in group '" & gr.title & _
+                                                                        "' - any NSM on it will not be written")
+                                                Else
+                                                            App.feAppMessage(FCM_NORMAL, _
+                                                                        "  Regions in group: " & Trim(Str$(regGrp.Count)))
+                                                End If
+                                    End If
 
                                     ' Custom header lines, rebuilt per group so the group
                                     ' name is right. Chr$(10) separated; FixFile splits it.
@@ -242,6 +266,20 @@ sao.NasBulkLargeField = UserFormat
             'Deletes dummy analysis Set after use
                         If sao.Deletable(saoID) Then
                                     sao.Delete(saoID)
+                        End If
+
+                        If nRegMissing > 0 Then
+                                    App.feAppMessage(FCM_ERROR, "----------------------------------------")
+                                    App.feAppMessage(FCM_ERROR, "  " & Trim(Str$(nRegMissing)) & " of " & _
+                                                Trim(Str$(grSet.Count)) & " group(s) contain no Regions, but the")
+                                    App.feAppMessage(FCM_ERROR, "  model has " & Trim(Str$(nRegModel)) & ".")
+                                    App.feAppMessage(FCM_ERROR, "  Nonstructural mass lives on a REGION, not on the")
+                                    App.feAppMessage(FCM_ERROR, "  elements. Femap writes only what is in the group,")
+                                    App.feAppMessage(FCM_ERROR, "  so those NSM cards were skipped - you may see the")
+                                    App.feAppMessage(FCM_ERROR, "  section comment with no card under it.")
+                                    App.feAppMessage(FCM_ERROR, "  Fix: add the Region to the group")
+                                    App.feAppMessage(FCM_ERROR, "  (Group - Set - <group>, then Group - Region).")
+                                    App.feAppMessage(FCM_ERROR, "----------------------------------------")
                         End If
 
                         App.feAppMessage( FCL_BLACK, "Done ")
@@ -347,13 +385,12 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
             '
             '   this run's custom lines
             '   ... every note carried over from previous exports ...
-            '   BANNER_MARK
-            '     Femap's provenance banner + the group line, regenerated
+            '   Femap's provenance banner + the group line, regenerated
             '
-            ' The marker is what makes re-reading deterministic. Without it a
-            ' re-export has to GUESS which "$" lines were the analyst's and which
-            ' were Femap's, and getting that wrong either loses a note or stacks
-            ' a stale banner forever. See ExistingNotes for the legacy fallback.
+            ' Nothing marks the boundary - the file is plain comments. A
+            ' re-export finds it by walking UP from the bulk data through the
+            ' banner, which is a contiguous run of recognisable shapes sitting at
+            ' the bottom of the header. See ExistingNotes.
             Dim custLines() As String
             Dim ci As Long
             Dim nNew As Long, nCarried As Long
@@ -383,7 +420,6 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
                         Next ci
             End If
 
-            writeNew.WriteLine BANNER_MARK
             For hi = 0 To nHdr - 1
                         writeNew.WriteLine hdr(hi)
             Next hi
@@ -543,27 +579,40 @@ Function DeleteTempFile(FileToDelete As String)
             Kill FileToDelete    'Deletes file
 
 End Function
-
 ' -----------------------------------------------------------------------------
 ' Pull the analyst's notes out of an already-exported .bdf so a re-export can
-' carry them forward. Returns them Chr$(10)-separated, oldest ordering preserved.
+' carry them forward. Returns them Chr$(10)-separated, order preserved.
 '
-' TWO PATHS, and the difference matters:
+' HOW THE BOUNDARY IS FOUND WITHOUT A MARKER
+' The header of a file this tool wrote is:
 '
-' MARKED (written by this build or later) - BANNER_MARK is present, so the answer
-' is exact: every comment above it is a note, everything from it down is the
-' regenerated banner. No interpretation, no guessing.
+'   notes        <- newest first, may be empty
+'   banner       <- Femap's, regenerated every export, always last
 '
-' LEGACY (written by an older build, or hand-made) - there are no markers, so
-' every "$" line in the header has to be classified. The rule is deliberately
-' LOPSIDED: a line is dropped only if it positively matches a shape Femap emits
-' in its banner. Anything unrecognised is KEPT. The failure mode is therefore a
-' stale banner line carried across once - visible, harmless, and self-correcting
-' on the next export because markers exist from then on. The alternative bias
-' would silently eat a note the analyst wrote, which is not recoverable.
+' so the split is found by walking UP from the bulk data. Femap's banner is a
+' CONTIGUOUS run of recognisable shapes at the bottom of the header, so the scan
+' stops at the first line from the bottom that is not one of them; everything
+' above that is a note.
 '
-' Reading stops at the first non-comment line. Everything below that is bulk
-' data and none of it is header.
+' Walking up matters. Classifying every line independently would drop a note
+' that merely happens to start "Date reviewed by..." wherever it sat. Walking up
+' only exposes the note directly adjacent to the banner, which is a far narrower
+' target - and one the Messages echo makes visible immediately, because a lost
+' or gained line shows up in the list printed on the very next export.
+'
+' Bare "$" spacers are absorbed into the banner run rather than stopping it.
+' They carry nothing, so losing one costs nothing, while stopping on one would
+' strand the whole banner above it and carry it forward as notes.
+'
+' BIAS: if the banner is not recognised at all, the scan stops immediately and
+' everything becomes a note. That keeps text rather than losing it - the right
+' way round, since a stale banner line appears in the Messages echo on the next
+' run and can be deleted, whereas a silently eaten note cannot be recovered.
+'
+' Files from earlier builds carry explicit markers. Those are still honoured as
+' a hard boundary when present, and their scaffolding lines are dropped.
+'
+' Reading stops at the first non-comment line - below that is bulk data.
 ' -----------------------------------------------------------------------------
 Function ExistingNotes(fso As Object, path As String, report As String) As String
 
@@ -573,7 +622,7 @@ Function ExistingNotes(fso As Object, path As String, report As String) As Strin
             Dim nRaw As Long
             Dim i As Long
             Dim marked As Boolean
-            Dim inNotes As Boolean
+            Dim cut As Long
             Dim out As String
             Dim nKept As Long, nDropped As Long
 
@@ -591,8 +640,8 @@ Function ExistingNotes(fso As Object, path As String, report As String) As Strin
                         If nRaw > UBound(raw) Then ReDim Preserve raw(nRaw * 2)
                         raw(nRaw) = ln
                         nRaw = nRaw + 1
-                        If Left(ln, Len(BANNER_MARK)) = BANNER_MARK Then marked = True
                         If Left(ln, Len(OLD_BANNER_MARK)) = OLD_BANNER_MARK Then marked = True
+                        If Left(ln, Len(OLD_BANNER_MK2)) = OLD_BANNER_MK2 Then marked = True
             Loop
             rd.Close
 
@@ -602,48 +651,52 @@ Function ExistingNotes(fso As Object, path As String, report As String) As Strin
                         Exit Function
             End If
 
-            ' In a MARKED file every comment ABOVE the banner marker is a note,
-            ' and everything from the marker down is the regenerated banner. The
-            ' newest notes sit at the top, so there is no lower bound to find -
-            ' the marker alone splits the header correctly.
-            inNotes = True
+            ' --- find where the notes end ---
+            cut = nRaw
+            If marked Then
+                        ' An older file: its marker is the boundary, exactly.
+                        For i = 0 To nRaw - 1
+                                    If Left(raw(i), Len(OLD_BANNER_MARK)) = OLD_BANNER_MARK Then
+                                                cut = i
+                                                Exit For
+                                    End If
+                                    If Left(raw(i), Len(OLD_BANNER_MK2)) = OLD_BANNER_MK2 Then
+                                                cut = i
+                                                Exit For
+                                    End If
+                        Next i
+            Else
+                        ' Walk up through the banner run.
+                        cut = nRaw
+                        Do While cut > 0
+                                    If IsBannerLine(raw(cut - 1)) Then
+                                                cut = cut - 1
+                                    ElseIf Trim(raw(cut - 1)) = "$" Then
+                                                cut = cut - 1
+                                    Else
+                                                Exit Do
+                                    End If
+                        Loop
+            End If
+
             For i = 0 To nRaw - 1
                         ln = raw(i)
-
-                        If Left(ln, Len(BANNER_MARK)) = BANNER_MARK Then
-                                    inNotes = False
-                        ElseIf Left(ln, Len(OLD_BANNER_MARK)) = OLD_BANNER_MARK Then
-                                    inNotes = False
-                        ElseIf Left(ln, Len(OLD_NOTES_BEGIN)) = OLD_NOTES_BEGIN Then
+                        If Left(ln, Len(OLD_NOTES_BEGIN)) = OLD_NOTES_BEGIN Then
                                     ' old scaffolding - not content
                         ElseIf Left(ln, Len(OLD_NOTES_END)) = OLD_NOTES_END Then
                                     ' old scaffolding - not content
+                        ElseIf i < cut Then
+                                    out = out & ln & Chr$(10)
+                                    nKept = nKept + 1
                         Else
-                                    If marked Then
-                                                If inNotes Then
-                                                            out = out & ln & Chr$(10)
-                                                            nKept = nKept + 1
-                                                Else
-                                                            nDropped = nDropped + 1
-                                                End If
-                                    Else
-                                                ' Legacy: keep unless positively identified as banner.
-                                                If IsBannerLine(ln) Then
-                                                            nDropped = nDropped + 1
-                                                Else
-                                                            out = out & ln & Chr$(10)
-                                                            nKept = nKept + 1
-                                                End If
-                                    End If
+                                    nDropped = nDropped + 1
                         End If
             Next i
 
-            If marked Then
-                        report = "marked file: " & Trim(Str$(nKept)) & " note(s) kept, " & _
-                                 Trim(Str$(nDropped)) & " banner line(s) dropped"
-            Else
-                        report = "LEGACY file (no markers): " & Trim(Str$(nKept)) & " line(s) kept, " & _
-                                 Trim(Str$(nDropped)) & " recognised as banner - check the header once"
+            report = Trim(Str$(nKept)) & " note(s) kept, " & _
+                     Trim(Str$(nDropped)) & " banner line(s) dropped"
+            If nKept > 0 And cut = nRaw Then
+                        report = report & " - BANNER NOT RECOGNISED, check the notes list above"
             End If
 
             ExistingNotes = out

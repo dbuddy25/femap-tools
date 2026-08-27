@@ -71,6 +71,22 @@ A checkbox on the options dialog writes the exported files into a subfolder of t
 Untick it to write beside the model, as before. The folder is created if it doesn't exist, and the run aborts with a message rather than writing somewhere unexpected if it can't be. A value containing a drive letter (`D:\shared\decks`) is treated as a full path and used as-is, so the same box also handles sending the export somewhere else entirely.
 
 
+## Nonstructural mass: NSM lives on a Region, not on elements
+
+If an export comes back with an NSM section comment and no card under it, the Region is almost certainly not in the group.
+
+Femap's group-filtered write (`NasBulkGroupID`) emits only entities that are **in the group**. A nonstructural-mass region is a *Region* entity — not an element and not a property — so a group holding all the right elements but not the region gets the comment and no card. Nothing is broken; the region simply wasn't selected.
+
+The tool now checks for this. If the model has Regions, every group is tested and the count reported; groups with none get a warning, and the run ends with an explanation and the fix:
+
+```
+  No regions in group 'Aft Splice Bracket' - any NSM on it will not be written
+```
+
+**Fix:** add the Region to the group — `Group → Set → <group>`, then `Group → Region`.
+
+One API trap worth recording, since it makes this check silently useless if you get it wrong: **`FT_CONTACT` (58) is a Femap *Region*; `FT_CONNECTION` (71) is the *Connector* (contact pair).** The names read backwards from what you would guess.
+
 ## Re-exporting: notes are preserved (2026-08-26)
 
 Exporting a group over an existing `.bdf` no longer wipes what was in its header. The tool reads the file it is about to overwrite, carries the notes forward, and writes this run's custom lines **above** them — so the header reads newest-first, like a log.
@@ -93,18 +109,17 @@ $ ***************************************************
 $ Exported from group: Aft Splice Bracket
 ```
 
-### Why there is one marker line
+### How the boundary is found with nothing marking it
 
-A re-export has to tell *your* notes from *Femap's* banner. That marker is the boundary: everything above it is a note, everything from it down is regenerated. Exact, no interpretation - pattern-matching the banner instead would be another guess about a file whose structure has already been guessed wrong three times.
+The file is plain comments — nothing is inserted to mark where your notes end and Femap's banner begins. A re-export finds the split by walking **up** from the bulk data: the banner is a contiguous run of recognisable shapes sitting at the bottom of the header, so the scan stops at the first line from the bottom that isn't one, and everything above is a note.
 
-It is the **minimum** scaffolding that still works. An earlier version also bracketed the notes with a begin/end pair, which was redundant - the notes are simply whatever precedes the banner - and put three lines of scaffolding into a Nastran deck where one will do. It cannot be dropped entirely without going back to guessing.
+Walking up is what makes this safe. Classifying every line independently would drop a note that merely happens to start `Date reviewed by...` wherever it sat. Walking up only exposes a note sitting *directly adjacent* to the banner — a far narrower target, and one the Messages echo catches immediately, since a lost or gained line shows up in the list printed on the very next export.
 
-**Editing below the marker is pointless** - that region is rewritten every export. Put anything you want to survive above it, or type it into the dialog.
-
+If the banner isn't recognised at all, everything becomes a note. That keeps text rather than losing it — the right way round, because a stale banner line shows up in the echo and can be deleted, while a silently eaten note cannot be recovered. That case is called out in the Messages line as `BANNER NOT RECOGNISED`.
 
 ### Files from the previous build
 
-The first version of this feature used a three-line scheme (`$>>> EXPORT NOTES` / `$<<< END EXPORT NOTES` / `$--- FEMAP BANNER`). Files already exported by it are read correctly, and its scaffolding lines are recognised and dropped rather than carried forward as if they were notes. Nothing to clean up by hand.
+Earlier versions inserted marker lines — first a three-line scheme (`$>>> EXPORT NOTES` / `$<<< END EXPORT NOTES` / `$--- FEMAP BANNER`), then a single `$--- Femap banner below is regenerated...`. Files carrying either are still read exactly: the marker is honoured as a hard boundary and the scaffolding lines are dropped rather than carried forward as notes. They clean themselves up on the next export; nothing to fix by hand.
 
 ### Older files (written before notes were preserved at all)
 
