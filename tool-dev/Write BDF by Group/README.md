@@ -101,6 +101,27 @@ Note that exporting the **whole analysis** and seeing NSM cards does not settle 
 
 **The region `type` enumeration in the API guide is incomplete** — it stops at 3 despite NSM regions existing on the same object.
 
+### Recovering the cards Femap won't write
+
+Confirmed from Femap's own Analysis Set Manager, not just this tool: set **Bulk Data Options → Group** and the NSM regions are dropped, even though they're in the group and carry real mass. There's no analysis-set switch for it.
+
+So the tool takes the cards from an export Femap *does* get right — one unfiltered whole-model write — and copies the ones belonging to each group across **verbatim**.
+
+Verbatim is the point. Generating `NSM1`/`NSML1` from the region data would mean deciding which card a given `MassType` maps to, what goes in the TYPE field, and how SIDs are assigned — three things reconstructed from the Nastran spec that could be quietly wrong in a deck that still runs. Femap's own output is the specification; it's copied, not interpreted.
+
+**Which cards belong to a group.** A card is copied only if *every* element it references is in the group, decided from the card's own ID list — so no mapping from card back to region is needed. `THRU` is expanded; a card using `BY` is skipped and reported rather than copied on an assumption about the stride.
+
+**Partial containment is skipped, not trimmed.** For the total-mass forms (`NSML`/`NSML1`) the value is a total to distribute across the listed elements, so handing the same total to a subset silently changes the mass. A missing card is visible; a wrong mass is not.
+
+**`NSMADD`** references SIDs rather than elements, so it's copied only when every SID it names was itself copied.
+
+**Cost and guards.** The whole-model export happens once per run, and only when a selected group actually contains an NSM region — a model without NSM pays nothing. The recovered cards are written only if Femap wrote none itself, so if a future Femap starts emitting them for group exports this stays out of the way instead of duplicating. Every card added is reported, and the block is labelled in the `.bdf`:
+
+```
+$ NSM cards below were copied from a whole-model export.
+$ Femap does not write them for a group-filtered export.
+```
+
 ## Re-exporting: notes are preserved (2026-08-26)
 
 Exporting a group over an existing `.bdf` no longer wipes what was in its header. The tool reads the file it is about to overwrite, carries the notes forward, and writes this run's custom lines **above** them — so the header reads newest-first, like a log.

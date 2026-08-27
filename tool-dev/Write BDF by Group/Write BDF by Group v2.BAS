@@ -207,6 +207,57 @@ sao.NasBulkLargeField = UserFormat
             Dim rgn As Object
             Set rgn = App.feConnectionRegion
 
+            ' --- does any selected group hold an NSM region? ------------------
+            '
+            ' If so, one unfiltered whole-model export is written now and mined
+            ' for NSM cards later. It is done ONCE for the whole run, not per
+            ' group, and not at all when there is no NSM to recover - so a model
+            ' without NSM regions pays nothing for this.
+            Dim needNSM As Boolean
+            Dim wholeFile As String
+            Dim nsmLines() As String
+            Dim nNsmLines As Long
+            needNSM = False
+            wholeFile = ""
+            ReDim nsmLines(255)
+            nNsmLines = 0
+
+            If nRegModel > 0 Then
+                        Dim probeID As Long
+                        Dim pj As Long
+                        grSet.Reset
+                        probeID = grSet.Next
+                        Do While probeID > 0
+                                    regGrp.Clear
+                                    rc = regGrp.AddGroup(FT_CONTACT, probeID)
+                                    If regGrp.Count > 0 Then
+                                                Dim prID As Long
+                                                prID = regGrp.First
+                                                For pj = 1 To regGrp.Count
+                                                            If rgn.Get(prID) = FE_OK Then
+                                                                        If rgn.type = FRT_NSM Then needNSM = True
+                                                            End If
+                                                            prID = regGrp.Next
+                                                Next pj
+                                    End If
+                                    probeID = grSet.Next
+                        Loop
+                        ' The export loop below walks this same set with
+                        ' NextInSet. Leave its cursor where that walk expects to
+                        ' find it rather than wherever this probe left it.
+                        grSet.Reset
+            End If
+
+            If needNSM Then
+                        App.feAppMessage(FCM_NORMAL, "NSM regions present - writing one whole-model deck to recover their cards")
+                        wholeFile = outPath & "~nsm_wholemodel_tmp"
+                        sao.NasBulkOn = True
+                        sao.NasBulkGroupID = 0          ' 0 = entire model
+                        sao.Put (saoID)
+                        sao.Active = saoID
+                        App.feFileWriteNastran(8, wholeFile)
+            End If
+
             Dim fixOK As Boolean
             Dim dropInfo As String
             Dim customHdr As String
@@ -305,7 +356,22 @@ sao.NasBulkLargeField = UserFormat
                                     If Trim(dlg.hdr2) <> "" Then customHdr = customHdr & AsComment(dlg.hdr2) & Chr$(10)
                                     If Trim(dlg.hdr3) <> "" Then customHdr = customHdr & AsComment(dlg.hdr3) & Chr$(10)
 
-                                    fixOK = FixFile(grFileName, customHdr, gr.title, dropInfo, App) 'Funciton that writes correct data to new final file
+                                    ' --- NSM cards for THIS group, lifted from the whole-model deck ---
+                                    nNsmLines = 0
+                                    If needNSM Then
+                                                Dim gElemSet As femap.Set
+                                                Set gElemSet = App.feSet
+                                                gElemSet.Clear
+                                                rc = gElemSet.AddGroup(FT_ELEM, gr.ID)
+                                                Dim harvestReport As String
+                                                harvestReport = ""
+                                                Dim fsoH As Object
+                                                Set fsoH = CreateObject("Scripting.FileSystemObject")
+                                                HarvestNSM fsoH, wholeFile, gElemSet, App, nsmLines(), nNsmLines, harvestReport
+                                                App.feAppMessage(FCM_NORMAL, "  NSM recovered: " & harvestReport)
+                                    End If
+
+                                    fixOK = FixFile(grFileName, customHdr, gr.title, dropInfo, App, nsmLines(), nNsmLines) 'Funciton that writes correct data to new final file
 
                                     If fixOK Then
                                                 App.feAppMessage(FCM_COMMAND,"Replaced lines and saved as bdf: " & grFileName & ".bdf")
@@ -326,6 +392,10 @@ sao.NasBulkLargeField = UserFormat
                                     sao.Delete(saoID)
                         End If
 
+                        If needNSM And Len(wholeFile) > 0 Then
+                                    DeleteTempFile(wholeFile)
+                        End If
+
                         App.feAppMessage( FCL_BLACK, "Done ")
 
 End Sub
@@ -343,7 +413,8 @@ End Sub
 ' Now nothing is counted. The header ends at BEGIN BULK, which is definitional,
 ' and the unwanted cards are removed by NAME with their continuation lines.
 ' -----------------------------------------------------------------------------
-Function FixFile(fileName As String, customHdr As String, grpTitle As String, dropSummary As String, App As Object) As Boolean
+Function FixFile(fileName As String, customHdr As String, grpTitle As String, dropSummary As String, App As Object, _
+                 nsmLines() As String, nNsmLines As Long) As Boolean
 
             Dim fso As Object
             Dim readOld As Object
@@ -580,6 +651,24 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
                           Trim(Str$(nHdr)) & " header + " & _
                           Trim(Str$(nComment)) & " inline comments kept)"
 
+            ' --- NSM cards Femap would not write for a group export ----------
+            '
+            ' Only when Femap wrote NONE itself. If a future Femap starts
+            ' emitting them for group exports, this stays out of the way rather
+            ' than duplicating every card.
+            If nNsmLines > 0 And nNSMseen = 0 Then
+                        writeNew.WriteLine "$"
+                        writeNew.WriteLine "$ NSM cards below were copied from a whole-model export."
+                        writeNew.WriteLine "$ Femap does not write them for a group-filtered export."
+                        Dim ni As Long
+                        For ni = 0 To nNsmLines - 1
+                                    writeNew.WriteLine nsmLines(ni)
+                        Next ni
+                        App.feAppMessage(FCM_HIGHLIGHT, "  NSM cards added: " & Trim(Str$(nNsmLines)) & " line(s)")
+            ElseIf nNsmLines > 0 Then
+                        App.feAppMessage(FCM_NORMAL, "  Femap wrote NSM itself - recovered cards not added")
+            End If
+
             readOld.Close
             writeNew.Close
 
@@ -780,3 +869,243 @@ Function ExistingNotes(fso As Object, path As String, hdr() As String, nHdr As L
             ExistingNotes = out
 
 End Function
+
+' -----------------------------------------------------------------------------
+' NSM HARVESTING
+'
+' Femap will not write NSM cards for a group-filtered export. Confirmed from
+' Femap's own Analysis Set Manager, not just this tool: set Bulk Data Options ->
+' Group and the NSM regions are dropped even though they are in the group and
+' carry real mass. There is no analysis-set switch for it.
+'
+' So the cards are taken from an export Femap DOES get right - an unfiltered
+' whole-model write - and the ones belonging to this group are copied across
+' VERBATIM.
+'
+' Verbatim is the whole point. Generating NSM1/NSML1 from the region data would
+' mean deciding which card a given MassType maps to, what goes in the TYPE
+' field, and how SIDs are assigned - three things that would be reconstructed
+' from the Nastran spec and could be quietly wrong in a deck that still runs.
+' Femap's own output is the specification, and it is copied, not interpreted.
+'
+' WHICH CARDS BELONG TO THIS GROUP
+' A card is copied only if EVERY element it references is in the group. That is
+' decided from the card's own ID list, so no mapping from card back to region is
+' needed.
+'
+' Partial containment is SKIPPED, not trimmed. For the total-mass forms
+' (NSML/NSML1) the value is a total to distribute over the listed elements, so
+' handing the same total to a subset silently changes the mass. A missing card
+' is visible; a wrong mass is not.
+'
+' NSMADD references SIDs rather than elements, so it is copied only when every
+' SID it names was itself copied.
+' -----------------------------------------------------------------------------
+Function HarvestNSM(fso As Object, wholeFile As String, elemSet As femap.Set, _
+                    App As Object, outLines() As String, nOut As Long, report As String) As Boolean
+
+            Dim rd As Object
+            Dim ln As String
+            Dim blk() As String
+            Dim nBlk As Long
+            Dim cardName As String
+            Dim inNSM As Boolean
+            Dim sidsKept As String
+            Dim nSkipped As Long
+            Dim skipWhy As String
+
+            HarvestNSM = False
+            nOut = 0
+            nSkipped = 0
+            sidsKept = ""
+            skipWhy = ""
+            ReDim blk(63)
+            nBlk = 0
+            inNSM = False
+
+            If Not fso.FileExists(wholeFile) Then
+                        report = "whole-model file missing"
+                        Exit Function
+            End If
+
+            Set rd = fso.OpenTextFile(wholeFile, 1)
+            Do While Not rd.AtEndOfStream
+                        ln = rd.ReadLine
+
+                        If IsNewCard(ln) Then
+                                    ' A new card ends whatever block was open.
+                                    If inNSM Then
+                                                EmitNSMBlock blk(), nBlk, elemSet, App, outLines(), nOut, sidsKept, nSkipped, skipWhy
+                                    End If
+                                    nBlk = 0
+                                    cardName = CardNameOf(ln)
+                                    inNSM = (Left(cardName, 3) = "NSM")
+                        End If
+
+                        If inNSM Then
+                                    If nBlk > UBound(blk) Then ReDim Preserve blk(nBlk * 2)
+                                    blk(nBlk) = ln
+                                    nBlk = nBlk + 1
+                        End If
+            Loop
+            If inNSM Then
+                        EmitNSMBlock blk(), nBlk, elemSet, App, outLines(), nOut, sidsKept, nSkipped, skipWhy
+            End If
+            rd.Close
+
+            report = Trim(Str$(nOut)) & " line(s) copied"
+            If nSkipped > 0 Then
+                        report = report & ", " & Trim(Str$(nSkipped)) & " card(s) skipped" & skipWhy
+            End If
+            HarvestNSM = (nOut > 0)
+
+End Function
+
+' -----------------------------------------------------------------------------
+' Decide one NSM card block and append it if it belongs to this group.
+'
+' Fields 1..3 of every NSM form are the card name, the SID and then TYPE/VALUE;
+' element IDs run from field 4 onward. That layout is shared by NSM, NSM1, NSML
+' and NSML1, so the block is read without needing to know which form it is.
+'
+' "THRU" expands to a range. "BY" is not expanded - a card using it is skipped
+' and said so, rather than being copied on an assumption about the stride.
+' -----------------------------------------------------------------------------
+Sub EmitNSMBlock(blk() As String, nBlk As Long, elemSet As femap.Set, App As Object, _
+                 outLines() As String, nOut As Long, sidsKept As String, _
+                 nSkipped As Long, skipWhy As String)
+
+            Dim i As Long, f As Long
+            Dim fld() As String
+            Dim nFld As Long
+            Dim cardName As String
+            Dim sid As String
+            Dim ids() As Long
+            Dim nIds As Long
+            Dim allIn As Boolean
+            Dim pendingThru As Boolean
+            Dim lastID As Long
+            Dim v As String
+            Dim k As Long
+            Dim isAdd As Boolean
+
+            If nBlk = 0 Then Exit Sub
+
+            cardName = CardNameOf(blk(0))
+            isAdd = (cardName = "NSMADD")
+
+            ReDim ids(255)
+            nIds = 0
+            sid = ""
+            pendingThru = False
+            lastID = 0
+            allIn = True
+
+            For i = 0 To nBlk - 1
+                        SplitCardFields blk(i), (i > 0), fld(), nFld
+                        For f = 0 To nFld - 1
+                                    v = Trim(fld(f))
+                                    If Len(v) = 0 Then GoTo NextField
+
+                                    If i = 0 And f = 0 Then GoTo NextField          ' card name
+                                    If i = 0 And f = 1 Then
+                                                sid = v
+                                                GoTo NextField
+                                    End If
+                                    If i = 0 And f < 4 And Not isAdd Then GoTo NextField   ' TYPE / VALUE
+
+                                    If UCase(v) = "THRU" Then
+                                                pendingThru = True
+                                                GoTo NextField
+                                    End If
+                                    If UCase(v) = "BY" Then
+                                                allIn = False
+                                                If InStr(skipWhy, "BY") = 0 Then skipWhy = skipWhy & " (a card uses BY)"
+                                                GoTo NextField
+                                    End If
+                                    If Not IsNumeric(v) Then GoTo NextField
+
+                                    If pendingThru Then
+                                                For k = lastID + 1 To CLng(Val(v))
+                                                            If nIds > UBound(ids) Then ReDim Preserve ids(nIds * 2)
+                                                            ids(nIds) = k
+                                                            nIds = nIds + 1
+                                                Next k
+                                                pendingThru = False
+                                    Else
+                                                If nIds > UBound(ids) Then ReDim Preserve ids(nIds * 2)
+                                                ids(nIds) = CLng(Val(v))
+                                                nIds = nIds + 1
+                                    End If
+                                    lastID = CLng(Val(v))
+NextField:
+                        Next f
+            Next i
+
+            If isAdd Then
+                        ' Every SID it combines must already have been copied.
+                        For k = 0 To nIds - 1
+                                    If InStr(sidsKept, " " & Trim(Str$(ids(k))) & " ") = 0 Then allIn = False
+                        Next k
+            Else
+                        For k = 0 To nIds - 1
+                                    If elemSet.IsAdded(ids(k)) <> FE_OK Then allIn = False
+                        Next k
+                        If nIds = 0 Then allIn = False
+            End If
+
+            If allIn Then
+                        For i = 0 To nBlk - 1
+                                    If nOut > UBound(outLines) Then ReDim Preserve outLines(nOut * 2)
+                                    outLines(nOut) = blk(i)
+                                    nOut = nOut + 1
+                        Next i
+                        If Not isAdd And Len(sid) > 0 Then sidsKept = sidsKept & " " & sid & " "
+            Else
+                        nSkipped = nSkipped + 1
+            End If
+
+End Sub
+
+' -----------------------------------------------------------------------------
+' Split one Nastran card line into fields.
+'
+' Three layouts have to be handled because the user chooses the field format on
+' the dialog: free field (commas), large field (16 characters, card name ends
+' with "*"), and small field (8 characters).
+' -----------------------------------------------------------------------------
+Sub SplitCardFields(ln As String, isCont As Boolean, fld() As String, nFld As Long)
+
+            Dim w As Long
+            Dim p As Long
+            Dim s As String
+
+            nFld = 0
+            ReDim fld(31)
+
+            If InStr(ln, ",") > 0 Then
+                        fld = Split(ln, ",")
+                        nFld = UBound(fld) + 1
+                        Exit Sub
+            End If
+
+            If InStr(Left(ln, 8), "*") > 0 Then
+                        w = 16
+            Else
+                        w = 8
+            End If
+
+            ' Field 1 is always 8 wide even on a large-field card.
+            s = Left(ln, 8)
+            fld(0) = s
+            nFld = 1
+            p = 9
+
+            Do While p <= Len(ln)
+                        If nFld > UBound(fld) Then ReDim Preserve fld(nFld * 2)
+                        fld(nFld) = Mid(ln, p, w)
+                        nFld = nFld + 1
+                        p = p + w
+            Loop
+
+End Sub
