@@ -114,7 +114,17 @@ Verbatim is the point. Generating `NSM1`/`NSML1` from the region data would mean
 
 **`NSMADD`** references SIDs rather than elements, so it's copied only when every SID it names was itself copied.
 
-**Cost and guards.** The whole-model export happens once per run, and only when a selected group actually contains an NSM region — a model without NSM pays nothing. The recovered cards are written only if Femap wrote none itself, so if a future Femap starts emitting them for group exports this stays out of the way instead of duplicating. Every card added is reported, and the block is labelled in the `.bdf`:
+**It is off by default.** The extra whole-model export is slow on a large model, and most exports don't need NSM. Tick **Recover NSM cards** when you do.
+
+Leaving it off never fails silently: the model is still checked for NSM regions — cheap, no export — and if a selected group has one, the run says so:
+
+```
+NSM regions are in these groups, but NSM recovery is off.
+Femap will not write their cards - the decks will have no NSM.
+Tick 'Recover NSM cards' if you need them.
+```
+
+**Cost and guards.** With it on, the whole-model export happens once per run, and only when a selected group actually contains an NSM region — a model without NSM pays nothing. The recovered cards are written only if Femap wrote none itself, so if a future Femap starts emitting them for group exports this stays out of the way instead of duplicating. Every card added is reported, and the block is labelled in the `.bdf`:
 
 ```
 $ NSM cards below were copied from a whole-model export.

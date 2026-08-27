@@ -109,7 +109,7 @@ grSet.SelectMultiID(FT_GROUP,1,"Select Group(s)")
 
 'Promts user for field format
 Dim UserFormat As Integer
-Begin Dialog UserDialog 560,368,"Write BDF by Group - Options" 'NasBulkLargeField %GRID:10,7,1,1
+Begin Dialog UserDialog 560,390,"Write BDF by Group - Options" 'NasBulkLargeField %GRID:10,7,1,1
             GroupBox 8,4,268,104,"Field format",.GroupBox1
                         ListBox 20,22,248,78,FFormat(),.ListBox1
             GroupBox 284,4,268,104,"Group name is already the file name?",.GroupBox2
@@ -130,12 +130,14 @@ Begin Dialog UserDialog 560,368,"Write BDF by Group - Options" 'NasBulkLargeFiel
                         CheckBox 20,254,196,16,"Write into a subfolder:",.chkSub
                         TextBox  222,250,318,22,.subBox
                         Text     20,278,520,14,"Relative to the model folder. Created if it does not exist."
-            OKButton 160,314,120,34
-            CancelButton 300,314,120,34
+            CheckBox 8,308,544,16,"Recover NSM cards (adds one whole-model export - slow on big models)",.chkNSM
+            OKButton 160,336,120,34
+            CancelButton 300,336,120,34
 End Dialog
 Dim dlg As UserDialog
 dlg.chkSub = 0
 dlg.subBox = "Model"
+dlg.chkNSM = 0
 UserFormat = Dialog(dlg)
 
 If UserFormat = -1 Then 'user pressed ok
@@ -227,7 +229,7 @@ sao.NasBulkLargeField = UserFormat
             ReDim nsmLines(255)
             nNsmLines = 0
 
-            If nRegModel > 0 Then
+            If nRegModel > 0 And dlg.chkNSM <> 0 Then
                         Dim probeID As Long
                         Dim pj As Long
                         grSet.Reset
@@ -251,6 +253,40 @@ sao.NasBulkLargeField = UserFormat
                         ' NextInSet. Leave its cursor where that walk expects to
                         ' find it rather than wherever this probe left it.
                         grSet.Reset
+            End If
+
+            ' When recovery is OFF, the model is still checked for NSM regions -
+            ' cheap, no export - so that a deck quietly missing its NSM is never
+            ' the silent outcome. Saying nothing here is how this went unnoticed
+            ' in the first place.
+            If nRegModel > 0 And dlg.chkNSM = 0 Then
+                        Dim quietID As Long
+                        Dim qi As Long
+                        Dim anyNSM As Boolean
+                        anyNSM = False
+                        grSet.Reset
+                        quietID = grSet.Next
+                        Do While quietID > 0
+                                    regGrp.Clear
+                                    rc = regGrp.AddGroup(FT_CONTACT, quietID)
+                                    If regGrp.Count > 0 Then
+                                                Dim qrID As Long
+                                                qrID = regGrp.First
+                                                For qi = 1 To regGrp.Count
+                                                            If rgn.Get(qrID) = FE_OK Then
+                                                                        If rgn.type = FRT_NSM Then anyNSM = True
+                                                            End If
+                                                            qrID = regGrp.Next
+                                                Next qi
+                                    End If
+                                    quietID = grSet.Next
+                        Loop
+                        grSet.Reset
+                        If anyNSM Then
+                                    App.feAppMessage(FCM_WARNING, "NSM regions are in these groups, but NSM recovery is off.")
+                                    App.feAppMessage(FCM_WARNING, "Femap will not write their cards - the decks will have no NSM.")
+                                    App.feAppMessage(FCM_WARNING, "Tick 'Recover NSM cards' if you need them.")
+                        End If
             End If
 
             If needNSM Then
