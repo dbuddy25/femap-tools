@@ -104,26 +104,29 @@ grSet.SelectMultiID(FT_GROUP,1,"Select Group(s)")
 
 'Promts user for field format
 Dim UserFormat As Integer
-Begin Dialog UserDialog 560,392,"Write BDF by Group - Options" 'NasBulkLargeField %GRID:10,7,1,1
-            GroupBox 8,4,268,108,"Field format",.GroupBox1
-                        ListBox 20,24,248,80,FFormat(),.ListBox1
-            GroupBox 284,4,268,108,"Group name is already the file name?",.GroupBox2
+Begin Dialog UserDialog 560,368,"Write BDF by Group - Options" 'NasBulkLargeField %GRID:10,7,1,1
+            GroupBox 8,4,268,104,"Field format",.GroupBox1
+                        ListBox 20,22,248,78,FFormat(),.ListBox1
+            GroupBox 284,4,268,104,"Group name is already the file name?",.GroupBox2
                         OptionGroup.Group1
-                        OptionButton 300,30,236,20,"No",.OptionButton1
-                        OptionButton 300,58,236,20,"Yes",.OptionButton2
+                        OptionButton 300,28,236,20,"No",.OptionButton1
+                        OptionButton 300,56,236,20,"Yes",.OptionButton2
             ' Three single-line boxes rather than one multiline box: every
             ' TextBox in this toolset is single-line, and this is not the script
             ' to try unproven dialog syntax on.
-            GroupBox 8,122,544,116,"Header comments (optional)",.GroupBox3
-                        TextBox 20,144,520,22,.hdr1
-                        TextBox 20,172,520,22,.hdr2
-                        TextBox 20,200,520,22,.hdr3
-            GroupBox 8,246,544,76,"Output folder",.GroupBox4
-                        CheckBox 20,268,200,16,"Write into a subfolder:",.chkSub
-                        TextBox  226,264,314,22,.subBox
-                        Text     20,294,520,20,"Relative to the model folder, created if missing. A full path (with a drive letter) is used as-is."
-            OKButton 160,340,120,34
-            CancelButton 300,340,120,34
+            GroupBox 8,116,544,110,"Header comments (optional)",.GroupBox3
+                        TextBox 20,136,520,22,.hdr1
+                        TextBox 20,164,520,22,.hdr2
+                        TextBox 20,192,520,22,.hdr3
+            ' The explanatory line is kept to ONE line that fits at this width.
+            ' WinWrap Text controls do not wrap gracefully - an overlong string
+            ' is clipped mid-sentence, which is worse than not saying it.
+            GroupBox 8,234,544,66,"Output folder",.GroupBox4
+                        CheckBox 20,254,196,16,"Write into a subfolder:",.chkSub
+                        TextBox  222,250,318,22,.subBox
+                        Text     20,278,520,14,"Relative to the model folder. Created if it does not exist."
+            OKButton 160,314,120,34
+            CancelButton 300,314,120,34
 End Dialog
 Dim dlg As UserDialog
 dlg.chkSub = 0
