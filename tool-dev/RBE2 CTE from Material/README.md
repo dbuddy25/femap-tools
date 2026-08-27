@@ -8,7 +8,7 @@ A model full of bolt-hole spiders needs CTE on the rigids so thermal cases behav
 
 ## What it does
 
-1. Every RBE2 in the model by default, or a selection.
+1. Pick the elements (default), or take every RBE2 in the model.
 2. For each: dependent nodes → the non-rigid elements on those nodes → those elements' materials → `mval(36)` → `el.RigidThermalExpansion`.
 3. One CTE found → written. More than one → skipped, reported, and grouped.
 

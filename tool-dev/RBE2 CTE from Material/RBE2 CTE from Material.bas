@@ -51,8 +51,8 @@ Sub Main
     Begin Dialog OptDlg 400, 256, "RBE2 CTE from Material"
         GroupBox 12, 8, 376, 64, "Which RBE2s"
         OptionGroup .scopeMode
-            OptionButton 24, 26, 352, 14, "Every RBE2 in the model"
-            OptionButton 24, 48, 352, 14, "Select them"
+            OptionButton 24, 26, 352, 14, "Select the elements"
+            OptionButton 24, 48, 352, 14, "Every RBE2 in the model"
         Text     12, 84, 200, 12, "CTE match tolerance (%):"
         TextBox  216, 82, 80, 18, .tolBox
         Text     12, 106, 376, 22, "Two materials whose CTEs agree within this are treated as one value, not a conflict."
@@ -88,17 +88,20 @@ Sub Main
     Dim rigidSet As femap.Set
     Set rigidSet = App.feSet
 
+    ' scopeMode 0 = pick them, 1 = whole model. Picking is first and default:
+    ' this tool WRITES to elements, so the narrower scope is the safer landing
+    ' place for a stray Enter.
     If dlg.scopeMode = 0 Then
+        rc = rigidSet.Select(FT_ELEM, True, "Select RBE2 elements")
+        If rc <> FE_OK Or rigidSet.Count = 0 Then
+            App.feAppMessage(FCM_WARNING, "Nothing selected - exiting")
+            Exit Sub
+        End If
+    Else
         ' Rule-based so the model is never fully walked just to find rigids.
         rc = rigidSet.AddRule(FET_L_RIGID, FGD_ELEM_BYTYPE)
         If rc <> FE_OK Or rigidSet.Count = 0 Then
             App.feAppMessage(FCM_WARNING, "No rigid elements in the model - exiting")
-            Exit Sub
-        End If
-    Else
-        rc = rigidSet.Select(FT_ELEM, True, "Select RBE2 elements")
-        If rc <> FE_OK Or rigidSet.Count = 0 Then
-            App.feAppMessage(FCM_WARNING, "Nothing selected - exiting")
             Exit Sub
         End If
     End If
