@@ -48,7 +48,7 @@ Sub Main
     ' ============================================================
     ' Section 1: Options
     ' ============================================================
-    Begin Dialog OptDlg 400, 236, "RBE2 CTE from Material"
+    Begin Dialog OptDlg 400, 256, "RBE2 CTE from Material"
         GroupBox 12, 8, 376, 64, "Which RBE2s"
         OptionGroup .scopeMode
             OptionButton 24, 26, 352, 14, "Every RBE2 in the model"
@@ -56,15 +56,17 @@ Sub Main
         Text     12, 84, 200, 12, "CTE match tolerance (%):"
         TextBox  216, 82, 80, 18, .tolBox
         Text     12, 106, 376, 22, "Two materials whose CTEs agree within this are treated as one value, not a conflict."
-        CheckBox 12, 136, 376, 14, "Put conflicted RBE2s in a group", .chkGroup
-        CheckBox 12, 156, 376, 14, "Report only - change nothing", .chkDry
-        OKButton     104, 196, 90, 24
-        CancelButton 214, 196, 90, 24
+        CheckBox 12, 136, 376, 14, "Leave RBE2s that already have a CTE alone", .chkKeep
+        CheckBox 12, 156, 376, 14, "Put conflicted RBE2s in a group", .chkGroup
+        CheckBox 12, 176, 376, 14, "Report only - change nothing", .chkDry
+        OKButton     104, 216, 90, 24
+        CancelButton 214, 216, 90, 24
     End Dialog
 
     Dim dlg As OptDlg
     dlg.scopeMode = 0
     dlg.tolBox = "0.1"
+    dlg.chkKeep = 1
     dlg.chkGroup = 1
     dlg.chkDry = 0
     If Dialog(dlg) <> -1 Then
@@ -73,11 +75,12 @@ Sub Main
     End If
 
     Dim tolPct As Double
-    Dim makeGroup As Boolean, dryRun As Boolean
+    Dim makeGroup As Boolean, dryRun As Boolean, keepExisting As Boolean
     tolPct = Val(dlg.tolBox)
     If tolPct < 0 Then tolPct = 0
     makeGroup = (dlg.chkGroup <> 0)
     dryRun = (dlg.chkDry <> 0)
+    keepExisting = (dlg.chkKeep <> 0)
 
     ' ============================================================
     ' Section 2: Every rigid in scope
@@ -168,10 +171,11 @@ Sub Main
     Dim badSet As femap.Set
     Set badSet = App.feSet
 
-    Dim tgtIDs() As Long, tgtCTE() As Double, tgtName() As String
+    Dim tgtIDs() As Long, tgtCTE() As Double, tgtName() As String, tgtOld() As Double
     ReDim tgtIDs(nR - 1)
     ReDim tgtCTE(nR - 1)
     ReDim tgtName(nR - 1)
+    ReDim tgtOld(nR - 1)
     Dim nTgt As Long
     nTgt = 0
 
@@ -276,6 +280,7 @@ Sub Main
                 tgtIDs(nTgt) = rIDs(i)
                 tgtCTE(nTgt) = cteVals(0)
                 tgtName(nTgt) = cteNames(0)
+                tgtOld(nTgt) = el.RigidThermalExpansion
                 nTgt = nTgt + 1
             Else
                 nConflict = nConflict + 1
@@ -295,8 +300,31 @@ Sub Main
     ' ============================================================
     ' Section 5: Confirm, then write
     ' ============================================================
-    Dim nWrote As Long, nFail As Long
-    nWrote = 0 : nFail = 0
+    Dim nWrote As Long, nFail As Long, nLeft As Long
+    nWrote = 0 : nFail = 0 : nLeft = 0
+
+    ' --- what is already on these elements ---
+    '
+    ' An existing CTE that DISAGREES with the derived one is worth seeing on its
+    ' own. It means either somebody set it by hand, or the material under the
+    ' spider changed since it was set - and the second case is a stale model,
+    ' not a preference. Reported whether or not it is going to be overwritten.
+    Dim nHad As Long, nHadSame As Long, nHadDiff As Long
+    nHad = 0 : nHadSame = 0 : nHadDiff = 0
+    For i = 0 To nTgt - 1
+        If tgtOld(i) <> 0 Then
+            nHad = nHad + 1
+            If SameCTE(tgtOld(i), tgtCTE(i), tolPct) Then
+                nHadSame = nHadSame + 1
+            Else
+                nHadDiff = nHadDiff + 1
+                App.feAppMessage(FCM_WARNING, "  RBE2 " + Trim$(Str$(tgtIDs(i))) _
+                    + " already has " + Format$(tgtOld(i), "0.0000E+00") _
+                    + ", material says " + Format$(tgtCTE(i), "0.0000E+00") _
+                    + "   (" + tgtName(i) + ")")
+            End If
+        End If
+    Next i
 
     If dryRun Then
         App.feAppMessage(FCM_HIGHLIGHT, "Report only - nothing was modified")
@@ -310,7 +338,13 @@ Sub Main
             App.feAppMessage(FCM_WARNING, "Cancelled - nothing modified")
         Else
             For i = 0 To nTgt - 1
-                If el.Get(tgtIDs(i)) = FE_OK Then
+                Dim doWrite As Boolean
+                doWrite = True
+                If tgtOld(i) <> 0 And keepExisting Then doWrite = False
+
+                If Not doWrite Then
+                    nLeft = nLeft + 1
+                ElseIf el.Get(tgtIDs(i)) = FE_OK Then
                     el.RigidThermalExpansion = tgtCTE(i)
                     If el.Put(tgtIDs(i)) = FE_OK Then
                         nWrote = nWrote + 1
@@ -357,6 +391,17 @@ Sub Main
     App.feAppMessage(FCM_NORMAL,    "  RBE2 resolved:         " + Trim$(Str$(nTgt)))
     If Not dryRun Then
         App.feAppMessage(FCM_NORMAL, "  CTE written:           " + Trim$(Str$(nWrote)))
+        If nLeft > 0 Then
+            App.feAppMessage(FCM_NORMAL, "  Left alone (had one):  " + Trim$(Str$(nLeft)))
+        End If
+    End If
+    If nHad > 0 Then
+        App.feAppMessage(FCM_NORMAL, "  Already had a CTE:     " + Trim$(Str$(nHad)) _
+            + "   (" + Trim$(Str$(nHadSame)) + " matching, " + Trim$(Str$(nHadDiff)) + " different)")
+        If nHadDiff > 0 And keepExisting Then
+            App.feAppMessage(FCM_WARNING, "  The " + Trim$(Str$(nHadDiff)) _
+                + " that differ were NOT changed - untick the keep option to overwrite.")
+        End If
     End If
 
     ' --- what was actually applied, and to how many ---

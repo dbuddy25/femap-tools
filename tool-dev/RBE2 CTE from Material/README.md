@@ -36,6 +36,21 @@ The comparison is **relative**, with a tolerance you set on the dialog (default 
       2.3400E-05   4 - AL 7075-T7351
 ```
 
+## Existing CTEs are left alone by default
+
+**Leave RBE2s that already have a CTE alone** is ticked by default. A nonzero `RigidThermalExpansion` usually means someone made a deliberate decision, and a batch tool shouldn't silently undo it.
+
+Either way, the tool reports what it found — and separates the two cases that matter:
+
+```
+  Already had a CTE:     44   (40 matching, 4 different)
+  RBE2 812 already has 1.2600E-05, material says 2.3400E-05   (4 - AL 7075-T7351)
+```
+
+A **matching** existing CTE is just confirmation. A **different** one is a finding: either somebody set it by hand for a reason, or the material under that spider changed since it was set and the value is now stale. The second case is a wrong model, not a preference — which is why the mismatches are listed individually rather than counted.
+
+Untick the option to overwrite. The report still lists every mismatch first, so you see what you're about to replace.
+
 ## The summary says what was applied, not just how many
 
 A single "wrote 180 elements" total isn't checkable. The report breaks it down by the value actually applied, so it can be read against what you expect the model to contain:
