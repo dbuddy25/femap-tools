@@ -84,7 +84,7 @@ The tool reports two numbers that tell the causes apart outright:
 
 | Reading | Meaning |
 |---|---|
-| `NSM cards in Femap's output: 0` | Femap never wrote them for this group — nothing is being filtered out downstream. Look at the Region membership. |
+| `NSM cards in Femap's output: 0` | Femap never wrote them for this group — nothing is being filtered out downstream. Check the `with nonstructural mass` count on the line above. |
 | `N seen, N kept` | They are in the `.bdf`. The problem is elsewhere. |
 | `N seen, 0 kept` | This tool dropped them — a bug here. |
 
@@ -92,7 +92,23 @@ Note that exporting the **whole analysis** and seeing NSM cards does not settle 
 
 **Fix:** add the Region to the group — `Group → Set → <group>`, then `Group → Region`.
 
-One API trap worth recording, since it makes this check silently useless if you get it wrong: **`FT_CONTACT` (58) is a Femap *Region*; `FT_CONNECTION` (71) is the *Connector* (contact pair).** The names read backwards from what you would guess.
+### Counting regions is not enough
+
+`FT_CONTACT` covers **every** region — contact, glue, bolt, fluid — so a model with glued contact reports plenty of regions while carrying no nonstructural mass at all. `Regions in group: 8` next to `NSM cards: 0` is exactly that situation, not a contradiction.
+
+The check therefore walks each region in the group and counts only those with a nonzero `MassNSM`:
+
+```
+  Regions in group: 8   (with nonstructural mass: 0)
+```
+
+`MassNSM` is tested rather than the region's `type` field because that field documents only `0=Contact, 1=Fluid, 2=Bolt, 3=Rotor` — no NSM value — while the same object carries the NSM mass properties. The NSM type number is undocumented, so it can't be relied on; a nonzero mass is unambiguous.
+
+### Two API traps worth recording
+
+**`FT_CONTACT` (58) is a Femap *Region*; `FT_CONNECTION` (71) is the *Connector* (contact pair).** The names read backwards from what you would guess, and the wrong one silently counts zero forever.
+
+**The region `type` enumeration in the API guide is incomplete** — it stops at 3 despite NSM regions existing on the same object.
 
 ## Re-exporting: notes are preserved (2026-08-26)
 

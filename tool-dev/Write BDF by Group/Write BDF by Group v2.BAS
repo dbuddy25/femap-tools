@@ -201,6 +201,8 @@ sao.NasBulkLargeField = UserFormat
 
             Dim regGrp As femap.Set
             Set regGrp = App.feSet
+            Dim rgn As Object
+            Set rgn = App.feConnectionRegion
             Dim nRegMissing As Long
             nRegMissing = 0
 
@@ -227,18 +229,42 @@ sao.NasBulkLargeField = UserFormat
                                                                         App.feFileWriteNastran(8,grFileName)  '8 for nx
                                                                         App.feAppMessage(FCM_COMMAND,"Wrote Original Nastran file: " & grFileName )
 
-                                    ' --- does this group carry its regions? ---
+                                    ' --- does this group carry its NSM regions? ---
+                                    '
+                                    ' Counting regions is not enough. FT_CONTACT covers EVERY
+                                    ' region - contact, glue, bolt, fluid - so a model with glued
+                                    ' contact reports plenty of regions while carrying no
+                                    ' nonstructural mass at all. The regions are walked and only
+                                    ' those with a nonzero MassNSM counted.
+                                    '
+                                    ' MassNSM is tested rather than the documented type field:
+                                    ' that field lists 0=Contact, 1=Fluid, 2=Bolt, 3=Rotor and
+                                    ' has no NSM value, yet the same object carries the NSM mass
+                                    ' properties - so the NSM type number is undocumented and
+                                    ' cannot be relied on. A nonzero mass is unambiguous.
                                     If nRegModel > 0 Then
                                                 regGrp.Clear
                                                 rc = regGrp.AddGroup(FT_CONTACT, gr.ID)
-                                                If regGrp.Count = 0 Then
+
+                                                Dim nNSMreg As Long
+                                                Dim regID As Long
+                                                Dim ri As Long
+                                                nNSMreg = 0
+                                                If regGrp.Count > 0 Then
+                                                            regID = regGrp.First
+                                                            For ri = 1 To regGrp.Count
+                                                                        If rgn.Get(regID) = FE_OK Then
+                                                                                    If rgn.MassNSM <> 0 Then nNSMreg = nNSMreg + 1
+                                                                        End If
+                                                                        regID = regGrp.Next
+                                                            Next ri
+                                                End If
+
+                                                App.feAppMessage(FCM_NORMAL, _
+                                                            "  Regions in group: " & Trim(Str$(regGrp.Count)) _
+                                                            & "   (with nonstructural mass: " & Trim(Str$(nNSMreg)) & ")")
+                                                If nNSMreg = 0 Then
                                                             nRegMissing = nRegMissing + 1
-                                                            App.feAppMessage(FCM_WARNING, _
-                                                                        "  No regions in group '" & gr.title & _
-                                                                        "' - any NSM on it will not be written")
-                                                Else
-                                                            App.feAppMessage(FCM_NORMAL, _
-                                                                        "  Regions in group: " & Trim(Str$(regGrp.Count)))
                                                 End If
                                     End If
 
@@ -271,17 +297,15 @@ sao.NasBulkLargeField = UserFormat
                         End If
 
                         If nRegMissing > 0 Then
-                                    App.feAppMessage(FCM_ERROR, "----------------------------------------")
-                                    App.feAppMessage(FCM_ERROR, "  " & Trim(Str$(nRegMissing)) & " of " & _
-                                                Trim(Str$(grSet.Count)) & " group(s) contain no Regions, but the")
-                                    App.feAppMessage(FCM_ERROR, "  model has " & Trim(Str$(nRegModel)) & ".")
-                                    App.feAppMessage(FCM_ERROR, "  Nonstructural mass lives on a REGION, not on the")
-                                    App.feAppMessage(FCM_ERROR, "  elements. Femap writes only what is in the group,")
-                                    App.feAppMessage(FCM_ERROR, "  so those NSM cards were skipped - you may see the")
-                                    App.feAppMessage(FCM_ERROR, "  section comment with no card under it.")
-                                    App.feAppMessage(FCM_ERROR, "  Fix: add the Region to the group")
-                                    App.feAppMessage(FCM_ERROR, "  (Group - Set - <group>, then Group - Region).")
-                                    App.feAppMessage(FCM_ERROR, "----------------------------------------")
+                                    App.feAppMessage(FCM_WARNING, "----------------------------------------")
+                                    App.feAppMessage(FCM_WARNING, "  " & Trim(Str$(nRegMissing)) & " of " & _
+                                                Trim(Str$(grSet.Count)) & " group(s) carry no region with")
+                                    App.feAppMessage(FCM_WARNING, "  nonstructural mass on it.")
+                                    App.feAppMessage(FCM_WARNING, "  NSM lives on a REGION, and Femap writes only what")
+                                    App.feAppMessage(FCM_WARNING, "  is in the group - so if the model has NSM, add")
+                                    App.feAppMessage(FCM_WARNING, "  that region to the group and re-export.")
+                                    App.feAppMessage(FCM_WARNING, "  Contact and glue regions do NOT count here.")
+                                    App.feAppMessage(FCM_WARNING, "----------------------------------------")
                         End If
 
                         App.feAppMessage( FCL_BLACK, "Done ")
