@@ -206,8 +206,6 @@ sao.NasBulkLargeField = UserFormat
             Set regGrp = App.feSet
             Dim rgn As Object
             Set rgn = App.feConnectionRegion
-            Dim nRegMissing As Long
-            nRegMissing = 0
 
             Dim fixOK As Boolean
             Dim dropInfo As String
@@ -249,25 +247,52 @@ sao.NasBulkLargeField = UserFormat
                                                 regGrp.Clear
                                                 rc = regGrp.AddGroup(FT_CONTACT, gr.ID)
 
-                                                Dim nNSMreg As Long
+                                                ' Raw field dump, not a verdict.
+                                                '
+                                                ' An earlier version counted regions whose MassNSM was
+                                                ' nonzero and called those "NSM regions". That is not
+                                                ' safe: MassNSM is only meaningful on an NSM-type
+                                                ' region, and read off a contact or glue region it can
+                                                ' hold anything left in the slot. It reported 8 of 8 on
+                                                ' a model whose NSM never reached the deck, which is
+                                                ' exactly the false positive you would expect.
+                                                '
+                                                ' The documented type values are 0=Contact, 1=Fluid,
+                                                ' 2=Bolt, 3=Rotor - with no NSM value, even though the
+                                                ' same object carries the NSM mass fields. So the type
+                                                ' number for NSM is unknown, and the honest thing is to
+                                                ' print what is actually there and let it be read.
                                                 Dim regID As Long
                                                 Dim ri As Long
-                                                nNSMreg = 0
+                                                Dim shown As Long
+                                                shown = 0
+                                                App.feAppMessage(FCM_HIGHLIGHT, _
+                                                            "  Regions in group '" & gr.title & "': " & Trim(Str$(regGrp.Count)))
                                                 If regGrp.Count > 0 Then
                                                             regID = regGrp.First
                                                             For ri = 1 To regGrp.Count
-                                                                        If rgn.Get(regID) = FE_OK Then
-                                                                                    If rgn.MassNSM <> 0 Then nNSMreg = nNSMreg + 1
+                                                                        If shown < 20 Then
+                                                                                    If rgn.Get(regID) = FE_OK Then
+                                                                                                App.feAppMessage(FCM_NORMAL, _
+                                                                                                            "    ID " & Trim(Str$(regID)) _
+                                                                                                            & "  type=" & Trim(Str$(rgn.type)) _
+                                                                                                            & "  MassType=" & Trim(Str$(rgn.MassType)) _
+                                                                                                            & "  MassNSM=" & Format$(rgn.MassNSM, "0.000000E+00") _
+                                                                                                            & "  count=" & Trim(Str$(rgn.count)) _
+                                                                                                            & "  " & rgn.title)
+                                                                                                shown = shown + 1
+                                                                                    Else
+                                                                                                App.feAppMessage(FCM_WARNING, _
+                                                                                                            "    ID " & Trim(Str$(regID)) & "  could not be read")
+                                                                                                shown = shown + 1
+                                                                                    End If
                                                                         End If
                                                                         regID = regGrp.Next
                                                             Next ri
-                                                End If
-
-                                                App.feAppMessage(FCM_NORMAL, _
-                                                            "  Regions in group: " & Trim(Str$(regGrp.Count)) _
-                                                            & "   (with nonstructural mass: " & Trim(Str$(nNSMreg)) & ")")
-                                                If nNSMreg = 0 Then
-                                                            nRegMissing = nRegMissing + 1
+                                                            If regGrp.Count > 20 Then
+                                                                        App.feAppMessage(FCM_NORMAL, "    ... and " _
+                                                                                    & Trim(Str$(regGrp.Count - 20)) & " more")
+                                                            End If
                                                 End If
                                     End If
 
@@ -297,18 +322,6 @@ sao.NasBulkLargeField = UserFormat
             'Deletes dummy analysis Set after use
                         If sao.Deletable(saoID) Then
                                     sao.Delete(saoID)
-                        End If
-
-                        If nRegMissing > 0 Then
-                                    App.feAppMessage(FCM_WARNING, "----------------------------------------")
-                                    App.feAppMessage(FCM_WARNING, "  " & Trim(Str$(nRegMissing)) & " of " & _
-                                                Trim(Str$(grSet.Count)) & " group(s) carry no region with")
-                                    App.feAppMessage(FCM_WARNING, "  nonstructural mass on it.")
-                                    App.feAppMessage(FCM_WARNING, "  NSM lives on a REGION, and Femap writes only what")
-                                    App.feAppMessage(FCM_WARNING, "  is in the group - so if the model has NSM, add")
-                                    App.feAppMessage(FCM_WARNING, "  that region to the group and re-export.")
-                                    App.feAppMessage(FCM_WARNING, "  Contact and glue regions do NOT count here.")
-                                    App.feAppMessage(FCM_WARNING, "----------------------------------------")
                         End If
 
                         App.feAppMessage( FCL_BLACK, "Done ")
@@ -416,7 +429,7 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
             oldNotes = ""
             notesReport = "no previous file"
             If fso.FileExists(newFileName) Then
-                        oldNotes = ExistingNotes(fso, newFileName, notesReport)
+                        oldNotes = ExistingNotes(fso, newFileName, hdr(), nHdr, notesReport)
             End If
 
             Set writeNew = fso.CreateTextFile(newFileName, True)
@@ -634,52 +647,51 @@ End Function
 ' Pull the analyst's notes out of an already-exported .bdf so a re-export can
 ' carry them forward. Returns them Chr$(10)-separated, order preserved.
 '
-' HOW THE BOUNDARY IS FOUND WITHOUT A MARKER
-' The header of a file this tool wrote is:
+' HOW THE BANNER IS IDENTIFIED - BY COMPARISON, NOT BY GUESSWORK
+' The caller has just read Femap's banner for THIS export into hdr(). The
+' previous export's banner is the same thing from the same Femap against the
+' same model, so nearly every line is character-for-character identical; only
+' the date moves.
 '
-'   notes        <- newest first, may be empty
-'   banner       <- Femap's, regenerated every export, always last
+' So a line in the old file is banner if it matches one of hdr() exactly, or if
+' its first 16 characters do - that prefix covers "$   Date       :" and friends
+' while stopping short of the value that changes.
 '
-' so the split is found by walking UP from the bulk data. Femap's banner is a
-' CONTIGUOUS run of recognisable shapes at the bottom of the header, so the scan
-' stops at the first line from the bottom that is not one of them; everything
-' above that is a note.
+' This replaced a set of hardcoded patterns ("Written by", "Version", a rule of
+' asterisks, ...) that were WRITTEN FROM MEMORY OF WHAT FEMAP EMITS, never
+' checked against a real file. They did not match, so every re-export kept the
+' previous banner as a note and appended a fresh one, and the header grew a
+' banner per run. Comparing against output Femap just produced needs no
+' knowledge of what the banner says.
 '
-' Walking up matters. Classifying every line independently would drop a note
-' that merely happens to start "Date reviewed by..." wherever it sat. Walking up
-' only exposes the note directly adjacent to the banner, which is a far narrower
-' target - and one the Messages echo makes visible immediately, because a lost
-' or gained line shows up in the list printed on the very next export.
+' Lines this tool writes itself ("$ Exported from group:") are known text and
+' are dropped by name.
 '
-' Bare "$" spacers are absorbed into the banner run rather than stopping it.
-' They carry nothing, so losing one costs nothing, while stopping on one would
-' strand the whole banner above it and carry it forward as notes.
-'
-' BIAS: if the banner is not recognised at all, the scan stops immediately and
-' everything becomes a note. That keeps text rather than losing it - the right
-' way round, since a stale banner line appears in the Messages echo on the next
-' run and can be deleted, whereas a silently eaten note cannot be recovered.
+' BIAS: an unmatched line is KEPT. Losing a note is unrecoverable; a stray line
+' appears in the Messages echo on the next run and can be deleted.
 '
 ' Files from earlier builds carry explicit markers. Those are still honoured as
-' a hard boundary when present, and their scaffolding lines are dropped.
+' a hard boundary and their scaffolding dropped.
 '
 ' Reading stops at the first non-comment line - below that is bulk data.
 ' -----------------------------------------------------------------------------
-Function ExistingNotes(fso As Object, path As String, report As String) As String
+Function ExistingNotes(fso As Object, path As String, hdr() As String, nHdr As Long, report As String) As String
 
             Dim rd As Object
             Dim ln As String
             Dim raw() As String
             Dim nRaw As Long
-            Dim i As Long
+            Dim i As Long, j As Long
             Dim marked As Boolean
             Dim cut As Long
+            Dim isBanner As Boolean
             Dim out As String
             Dim nKept As Long, nDropped As Long
 
             ReDim raw(255)
             nRaw = 0
             marked = False
+            cut = -1
             out = ""
             nKept = 0
             nDropped = 0
@@ -690,9 +702,16 @@ Function ExistingNotes(fso As Object, path As String, report As String) As Strin
                         If Left(LTrim(ln), 1) <> "$" Then Exit Do
                         If nRaw > UBound(raw) Then ReDim Preserve raw(nRaw * 2)
                         raw(nRaw) = ln
+                        If cut < 0 Then
+                                    If Left(ln, Len(OLD_BANNER_MARK)) = OLD_BANNER_MARK Then
+                                                marked = True
+                                                cut = nRaw
+                                    ElseIf Left(ln, Len(OLD_BANNER_MK2)) = OLD_BANNER_MK2 Then
+                                                marked = True
+                                                cut = nRaw
+                                    End If
+                        End If
                         nRaw = nRaw + 1
-                        If Left(ln, Len(OLD_BANNER_MARK)) = OLD_BANNER_MARK Then marked = True
-                        If Left(ln, Len(OLD_BANNER_MK2)) = OLD_BANNER_MK2 Then marked = True
             Loop
             rd.Close
 
@@ -702,108 +721,45 @@ Function ExistingNotes(fso As Object, path As String, report As String) As Strin
                         Exit Function
             End If
 
-            ' --- find where the notes end ---
-            cut = nRaw
-            If marked Then
-                        ' An older file: its marker is the boundary, exactly.
-                        For i = 0 To nRaw - 1
-                                    If Left(raw(i), Len(OLD_BANNER_MARK)) = OLD_BANNER_MARK Then
-                                                cut = i
-                                                Exit For
-                                    End If
-                                    If Left(raw(i), Len(OLD_BANNER_MK2)) = OLD_BANNER_MK2 Then
-                                                cut = i
-                                                Exit For
-                                    End If
-                        Next i
-            Else
-                        ' Walk up through the banner run.
-                        cut = nRaw
-                        Do While cut > 0
-                                    If IsBannerLine(raw(cut - 1)) Then
-                                                cut = cut - 1
-                                    ElseIf Trim(raw(cut - 1)) = "$" Then
-                                                cut = cut - 1
-                                    Else
-                                                Exit Do
-                                    End If
-                        Loop
-            End If
-
             For i = 0 To nRaw - 1
                         ln = raw(i)
-                        If Left(ln, Len(OLD_NOTES_BEGIN)) = OLD_NOTES_BEGIN Then
-                                    ' old scaffolding - not content
-                        ElseIf Left(ln, Len(OLD_NOTES_END)) = OLD_NOTES_END Then
-                                    ' old scaffolding - not content
-                        ElseIf i < cut Then
-                                    out = out & ln & Chr$(10)
-                                    nKept = nKept + 1
-                        Else
+
+                        If marked And i >= cut Then
+                                    ' Older file: everything from its marker down is banner.
                                     nDropped = nDropped + 1
+                        ElseIf Left(ln, Len(OLD_NOTES_BEGIN)) = OLD_NOTES_BEGIN Then
+                                    nDropped = nDropped + 1
+                        ElseIf Left(ln, Len(OLD_NOTES_END)) = OLD_NOTES_END Then
+                                    nDropped = nDropped + 1
+                        ElseIf Left(LTrim(ln), 22) = "$ Exported from group:" Then
+                                    nDropped = nDropped + 1
+                        Else
+                                    isBanner = False
+                                    For j = 0 To nHdr - 1
+                                                If ln = hdr(j) Then
+                                                            isBanner = True
+                                                            Exit For
+                                                End If
+                                                If Len(ln) >= 16 And Len(hdr(j)) >= 16 Then
+                                                            If Left(ln, 16) = Left(hdr(j), 16) Then
+                                                                        isBanner = True
+                                                                        Exit For
+                                                            End If
+                                                End If
+                                    Next j
+
+                                    If isBanner Then
+                                                nDropped = nDropped + 1
+                                    Else
+                                                out = out & ln & Chr$(10)
+                                                nKept = nKept + 1
+                                    End If
                         End If
             Next i
 
             report = Trim(Str$(nKept)) & " note(s) kept, " & _
                      Trim(Str$(nDropped)) & " banner line(s) dropped"
-            If nKept > 0 And cut = nRaw Then
-                        report = report & " - BANNER NOT RECOGNISED, check the notes list above"
-            End If
 
             ExistingNotes = out
-
-End Function
-
-' -----------------------------------------------------------------------------
-' True only for the comment shapes Femap itself writes into its export banner.
-' Used ONLY on legacy files that predate the markers. Kept deliberately narrow -
-' see ExistingNotes for why the bias runs this way.
-'
-' Femap emits, with varying whitespace:
-'   $ **********************************
-'   $   Written by : Femap
-'   $   Version    : 2306
-'   $   Translator : Simcenter Nastran
-'   $   From Model : C:\path\model.modfem
-'   $   Date       : Tue Aug 26 ...
-' plus the "Exported from group:" line this tool used to write as a note.
-' -----------------------------------------------------------------------------
-Function IsBannerLine(ln As String) As Boolean
-
-            Dim t As String
-            Dim u As String
-            Dim i As Long
-            Dim c As String
-            Dim allRule As Boolean
-
-            IsBannerLine = False
-            t = Trim(ln)
-            If Left(t, 1) <> "$" Then Exit Function
-
-            t = Trim(Mid(t, 2))
-            If Len(t) = 0 Then Exit Function      ' a bare "$" spacer - not banner
-
-            ' A rule line: nothing after the "$" but * - = or _ characters.
-            allRule = True
-            For i = 1 To Len(t)
-                        c = Mid(t, i, 1)
-                        If c <> "*" And c <> "-" And c <> "=" And c <> "_" Then
-                                    allRule = False
-                                    Exit For
-                        End If
-            Next i
-            If allRule Then
-                        IsBannerLine = True
-                        Exit Function
-            End If
-
-            u = UCase(t)
-            If Left(u, 11) = "WRITTEN BY "        Then IsBannerLine = True
-            If Left(u, 8)  = "VERSION "           Then IsBannerLine = True
-            If Left(u, 11) = "TRANSLATOR "        Then IsBannerLine = True
-            If Left(u, 11) = "FROM MODEL "        Then IsBannerLine = True
-            If Left(u, 5)  = "DATE "              Then IsBannerLine = True
-            If Left(u, 10) = "OUTPUT TO "         Then IsBannerLine = True
-            If Left(u, 20) = "EXPORTED FROM GROUP:" Then IsBannerLine = True
 
 End Function

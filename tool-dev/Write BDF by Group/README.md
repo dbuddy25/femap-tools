@@ -75,12 +75,15 @@ If an export comes back with an NSM section comment and no card under it, the Re
 
 Femap's group-filtered write (`NasBulkGroupID`) emits only entities that are **in the group**. A nonstructural-mass region is a *Region* entity — not an element and not a property — so a group holding all the right elements but not the region gets the comment and no card. Nothing is broken; the region simply wasn't selected.
 
-The tool reports two numbers that tell the causes apart outright:
+The tool prints the raw region fields for each group, plus the NSM card counts:
 
 ```
-  Regions in group: 0
+  Regions in group 'Aft Splice Bracket': 8
+    ID 3  type=0  MassType=1  MassNSM=2.500000E-04  count=112  Skin NSM
   NSM cards in Femap's output: 0, kept: 0
 ```
+
+These are raw field values, deliberately **not** a verdict. An earlier version counted regions whose `MassNSM` was nonzero and called those NSM regions — but `MassNSM` is only meaningful on an NSM-type region, and read off a contact or glue region it can hold whatever was left in the slot. It reported 8 of 8 on a model whose NSM never reached the deck. The documented `type` values stop at `3=Rotor` with no NSM entry, so there is no reliable field to test; printing what is there and reading it is the honest option.
 
 | Reading | Meaning |
 |---|---|
@@ -91,18 +94,6 @@ The tool reports two numbers that tell the causes apart outright:
 Note that exporting the **whole analysis** and seeing NSM cards does not settle this: that export isn't group-filtered, so it only proves the model has NSM and Femap can write it. The numbers above are from the group-filtered write, which is the one that matters.
 
 **Fix:** add the Region to the group — `Group → Set → <group>`, then `Group → Region`.
-
-### Counting regions is not enough
-
-`FT_CONTACT` covers **every** region — contact, glue, bolt, fluid — so a model with glued contact reports plenty of regions while carrying no nonstructural mass at all. `Regions in group: 8` next to `NSM cards: 0` is exactly that situation, not a contradiction.
-
-The check therefore walks each region in the group and counts only those with a nonzero `MassNSM`:
-
-```
-  Regions in group: 8   (with nonstructural mass: 0)
-```
-
-`MassNSM` is tested rather than the region's `type` field because that field documents only `0=Contact, 1=Fluid, 2=Bolt, 3=Rotor` — no NSM value — while the same object carries the NSM mass properties. The NSM type number is undocumented, so it can't be relied on; a nonzero mass is unambiguous.
 
 ### Two API traps worth recording
 
@@ -132,13 +123,15 @@ $ ***************************************************
 $ Exported from group: Aft Splice Bracket
 ```
 
-### How the boundary is found with nothing marking it
+### How the banner is identified — by comparison, not guesswork
 
-The file is plain comments — nothing is inserted to mark where your notes end and Femap's banner begins. A re-export finds the split by walking **up** from the bulk data: the banner is a contiguous run of recognisable shapes sitting at the bottom of the header, so the scan stops at the first line from the bottom that isn't one, and everything above is a note.
+Nothing is inserted into the file to mark where your notes end. Instead, the tool compares against Femap's output for *this* export, which it has just read.
 
-Walking up is what makes this safe. Classifying every line independently would drop a note that merely happens to start `Date reviewed by...` wherever it sat. Walking up only exposes a note sitting *directly adjacent* to the banner — a far narrower target, and one the Messages echo catches immediately, since a lost or gained line shows up in the list printed on the very next export.
+The previous export's banner came from the same Femap against the same model, so nearly every line is character-for-character identical — only the date moves. A line in the old file is therefore banner if it matches one of this run's banner lines exactly, or if its first 16 characters do (that prefix covers `$   Date       :` while stopping short of the value that changes). Lines this tool writes itself, like `$ Exported from group:`, are known text and dropped by name.
 
-If the banner isn't recognised at all, everything becomes a note. That keeps text rather than losing it — the right way round, because a stale banner line shows up in the echo and can be deleted, while a silently eaten note cannot be recovered. That case is called out in the Messages line as `BANNER NOT RECOGNISED`.
+This replaced a set of hardcoded patterns — `Written by`, `Version`, a rule of asterisks, and so on — that were written from memory of what Femap emits and never checked against a real file. They didn't match, so every re-export kept the previous banner as a note *and* appended a fresh one, and the header grew a banner per run. Comparing against output Femap just produced needs no knowledge of what the banner actually says.
+
+An unmatched line is **kept**. Losing a note is unrecoverable; a stray line shows up in the Messages echo on the next run and can be deleted.
 
 ### Files from the previous build
 
