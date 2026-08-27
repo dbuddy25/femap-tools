@@ -257,11 +257,12 @@ sao.NasBulkLargeField = UserFormat
                                                 ' a model whose NSM never reached the deck, which is
                                                 ' exactly the false positive you would expect.
                                                 '
-                                                ' The documented type values are 0=Contact, 1=Fluid,
-                                                ' 2=Bolt, 3=Rotor - with no NSM value, even though the
-                                                ' same object carries the NSM mass fields. So the type
-                                                ' number for NSM is unknown, and the honest thing is to
-                                                ' print what is actually there and let it be read.
+                                                ' The type field IS reliable after all - the Region
+                                                ' Object property table omits NSM from its 0..3 list,
+                                                ' but the constants table has FRT_NSM alongside
+                                                ' FRT_CONNECTION / FRT_FLUID / FRT_BOLT / FRT_ROTOR.
+                                                ' The named constant is used rather than a number so
+                                                ' this does not depend on the ordering holding.
                                                 Dim regID As Long
                                                 Dim ri As Long
                                                 Dim shown As Long
@@ -276,6 +277,7 @@ sao.NasBulkLargeField = UserFormat
                                                                                                 App.feAppMessage(FCM_NORMAL, _
                                                                                                             "    ID " & Trim(Str$(regID)) _
                                                                                                             & "  type=" & Trim(Str$(rgn.type)) _
+                                                                                                            & IIf(rgn.type = FRT_NSM, " (NSM)", "") _
                                                                                                             & "  MassType=" & Trim(Str$(rgn.MassType)) _
                                                                                                             & "  MassNSM=" & Format$(rgn.MassNSM, "0.000000E+00") _
                                                                                                             & "  count=" & Trim(Str$(rgn.count)) _
