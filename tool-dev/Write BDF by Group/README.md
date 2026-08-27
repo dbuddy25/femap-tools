@@ -75,11 +75,22 @@ If an export comes back with an NSM section comment and no card under it, the Re
 
 Femap's group-filtered write (`NasBulkGroupID`) emits only entities that are **in the group**. A nonstructural-mass region is a *Region* entity — not an element and not a property — so a group holding all the right elements but not the region gets the comment and no card. Nothing is broken; the region simply wasn't selected.
 
-The tool now checks for this. If the model has Regions, every group is tested and the count reported; groups with none get a warning, and the run ends with an explanation and the fix:
+The tool reports two numbers that tell the causes apart outright:
 
 ```
-  No regions in group 'Aft Splice Bracket' - any NSM on it will not be written
+  Regions in group: 0
+  NSM cards in Femap's output: 0, kept: 0
 ```
+
+| Reading | Meaning |
+|---|---|
+| `NSM cards in Femap's output: 0` | Femap never wrote them for this group — nothing is being filtered out downstream. Look at the Region membership. |
+| `N seen, N kept` | They are in the `.bdf`. The problem is elsewhere. |
+| `N seen, 0 kept` | This tool dropped them — a bug here. |
+
+Note that exporting the **whole analysis** and seeing NSM cards does not settle this: that export isn't group-filtered, so it only proves the model has NSM and Femap can write it. The numbers above are from the group-filtered write, which is the one that matters.
+
+A **Keep Femap's raw temp file** checkbox on the options dialog preserves the untouched Femap output next to the `.bdf`, for when the counts aren't enough.
 
 **Fix:** add the Region to the group — `Group → Set → <group>`, then `Group → Region`.
 

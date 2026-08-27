@@ -104,7 +104,7 @@ grSet.SelectMultiID(FT_GROUP,1,"Select Group(s)")
 
 'Promts user for field format
 Dim UserFormat As Integer
-Begin Dialog UserDialog 400,412,"Options" 'NasBulkLargeField %GRID:10,7,1,1
+Begin Dialog UserDialog 400,430,"Options" 'NasBulkLargeField %GRID:10,7,1,1
             GroupBox 5,0,300,100,"Select Field Format",.GroupBox1
                         ListBox 20,21,200,75,FFormat(),.ListBox1
             GroupBox 5,120,300,70,"Is Group Name already the bdf file Name?",.GroupBox2
@@ -122,12 +122,14 @@ Begin Dialog UserDialog 400,412,"Options" 'NasBulkLargeField %GRID:10,7,1,1
                         CheckBox 15,308,175,14,"Write into a subfolder:",.chkSub
                         TextBox  196,306,184,18,.subBox
                         Text     15,330,365,20,"Relative to the model folder, and created if it does not exist. A full path (one containing a drive letter) is used as-is."
-            OKButton 70,364,120,35
-            CancelButton 220,364,120,35
+            CheckBox 5,362,385,14,"Keep Femap's raw temp file (to see what Femap actually wrote)",.chkKeepTemp
+            OKButton 70,382,120,35
+            CancelButton 220,382,120,35
 End Dialog
 Dim dlg As UserDialog
 dlg.chkSub = 0
 dlg.subBox = "Model"
+dlg.chkKeepTemp = 0
 UserFormat = Dialog(dlg)
 
 If UserFormat = -1 Then 'user pressed ok
@@ -254,8 +256,12 @@ sao.NasBulkLargeField = UserFormat
                                     If fixOK Then
                                                 App.feAppMessage(FCM_COMMAND,"Replaced lines and saved as bdf: " & grFileName & ".bdf")
                                                 App.feAppMessage(FCM_COMMAND,"  Removed: " & dropInfo)
-                                                DeleteTempFile(grFileName)  'Function that deletes the temporary file
-                                                App.feAppMessage(FCM_COMMAND,"Deleted original file: " & grFileName)
+                                                If dlg.chkKeepTemp <> 0 Then
+                                                            App.feAppMessage(FCM_WARNING,"Kept Femap's raw temp file: " & grFileName)
+                                                Else
+                                                            DeleteTempFile(grFileName)  'Function that deletes the temporary file
+                                                            App.feAppMessage(FCM_COMMAND,"Deleted original file: " & grFileName)
+                                                End If
                                     Else
                                                 ' The temp file is deliberately KEPT here - if the header could not be
                                                 ' parsed, the raw Femap output is the only way to see what happened.
@@ -320,6 +326,17 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
             Dim nComment As Long
             nEigrl = 0 : nCord = 0 : nParam = 0 : nKept = 0
             nComment = 0
+
+            ' Counted separately because "the NSM went missing" has two very
+            ' different causes and this number tells them apart outright:
+            '   0 seen  -> Femap never wrote them. The region is not in the
+            '              group, so nothing here can help.
+            '   N seen, N kept -> they ARE in the .bdf and the problem is
+            '              elsewhere.
+            ' Covers NSM, NSM1, NSML, NSML1 and NSMADD via the name prefix.
+            Dim nNSMseen As Long, nNSMkept As Long
+            nNSMseen = 0
+            nNSMkept = 0
 
             FixFile = False
             dropSummary = ""
@@ -486,6 +503,11 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
                                                 skipping = False
                                     End If
 
+                                    If Left(cardName, 3) = "NSM" Then
+                                                nNSMseen = nNSMseen + 1
+                                                If Not skipping Then nNSMkept = nNSMkept + 1
+                                    End If
+
                                     If Not skipping Then nKept = nKept + 1
                         End If
 
@@ -493,6 +515,12 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
 
                         End If
             Loop
+
+            App.feAppMessage(FCM_NORMAL, "  NSM cards in Femap's output: " & Trim(Str$(nNSMseen)) _
+                        & ", kept: " & Trim(Str$(nNSMkept)))
+            If nNSMseen = 0 Then
+                        App.feAppMessage(FCM_WARNING, "  Femap wrote no NSM cards for this group - nothing was filtered out here.")
+            End If
 
             dropSummary = Trim(Str$(nEigrl)) & " EIGRL, " & _
                           Trim(Str$(nCord)) & " global CORD2C/S, " & _
