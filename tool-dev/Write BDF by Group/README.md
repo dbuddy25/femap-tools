@@ -114,6 +114,8 @@ Verbatim is the point. Generating `NSM1`/`NSML1` from the region data would mean
 
 **`NSMADD`** references SIDs rather than elements, so it's copied only when every SID it names was itself copied.
 
+**The whole-model deck is read once, not once per group.** The first version re-read it inside the group loop — that file is the entire model, so a twenty-group export made twenty full passes over the largest file in the job and every group took visibly longer than it should have. The NSM card blocks are cached in memory before the loop starts; each group only re-runs the containment test against that cache.
+
 **It is off by default.** The extra whole-model export is slow on a large model, and most exports don't need NSM. Tick **Recover NSM cards** when you do.
 
 Leaving it off never fails silently: the model is still checked for NSM regions — cheap, no export — and if a selected group has one, the run says so:

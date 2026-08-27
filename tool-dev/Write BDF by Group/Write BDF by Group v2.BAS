@@ -224,6 +224,11 @@ sao.NasBulkLargeField = UserFormat
             Dim wholeFile As String
             Dim nsmLines() As String
             Dim nNsmLines As Long
+            Dim nsmBlkLines() As String
+            Dim nsmBlkStart() As Long
+            Dim nsmBlkCount() As Long
+            Dim nNsmBlk As Long
+            nNsmBlk = 0
             needNSM = False
             wholeFile = ""
             ReDim nsmLines(255)
@@ -297,6 +302,16 @@ sao.NasBulkLargeField = UserFormat
                         sao.Put (saoID)
                         sao.Active = saoID
                         App.feFileWriteNastran(8, wholeFile)
+
+                        ' Read it ONCE. Doing this inside the group loop made
+                        ' every group re-scan the largest file in the job.
+                        Dim fsoC As Object
+                        Set fsoC = CreateObject("Scripting.FileSystemObject")
+                        If CacheNSM(fsoC, wholeFile, nsmBlkLines(), nsmBlkStart(), nsmBlkCount(), nNsmBlk) Then
+                                    App.feAppMessage(FCM_NORMAL, "  Cached " & Trim(Str$(nNsmBlk)) & " NSM card block(s)")
+                        Else
+                                    App.feAppMessage(FCM_WARNING, "  No NSM cards found in the whole-model deck")
+                        End If
             End If
 
             Dim fixOK As Boolean
@@ -406,9 +421,8 @@ sao.NasBulkLargeField = UserFormat
                                                 rc = gElemSet.AddGroup(FT_ELEM, gr.ID)
                                                 Dim harvestReport As String
                                                 harvestReport = ""
-                                                Dim fsoH As Object
-                                                Set fsoH = CreateObject("Scripting.FileSystemObject")
-                                                HarvestNSM fsoH, wholeFile, gElemSet, App, nsmLines(), nNsmLines, harvestReport
+                                                HarvestNSM nsmBlkLines(), nsmBlkStart(), nsmBlkCount(), nNsmBlk, _
+                                                            gElemSet, nsmLines(), nNsmLines, harvestReport
                                                 App.feAppMessage(FCM_NORMAL, "  NSM recovered: " & harvestReport)
                                     End If
 
@@ -929,7 +943,6 @@ Function ExistingNotes(fso As Object, path As String, hdr() As String, nHdr As L
             ExistingNotes = out
 
 End Function
-
 ' -----------------------------------------------------------------------------
 ' NSM HARVESTING
 '
@@ -939,7 +952,7 @@ End Function
 ' carry real mass. There is no analysis-set switch for it.
 '
 ' So the cards are taken from an export Femap DOES get right - an unfiltered
-' whole-model write - and the ones belonging to this group are copied across
+' whole-model write - and the ones belonging to each group are copied across
 ' VERBATIM.
 '
 ' Verbatim is the whole point. Generating NSM1/NSML1 from the region data would
@@ -948,10 +961,71 @@ End Function
 ' from the Nastran spec and could be quietly wrong in a deck that still runs.
 ' Femap's own output is the specification, and it is copied, not interpreted.
 '
-' WHICH CARDS BELONG TO THIS GROUP
-' A card is copied only if EVERY element it references is in the group. That is
-' decided from the card's own ID list, so no mapping from card back to region is
-' needed.
+' *** THE WHOLE-MODEL DECK IS READ ONCE, NOT ONCE PER GROUP ***
+' The first version re-read it inside the group loop. That file is the entire
+' model, so a twenty-group export made twenty full passes over the largest file
+' in the job and every group took visibly longer than it should have. The NSM
+' blocks are now cached in memory by CacheNSM before the loop starts, and each
+' group only re-runs the containment test against that cache.
+' -----------------------------------------------------------------------------
+Function CacheNSM(fso As Object, wholeFile As String, _
+                  blkLines() As String, blkStart() As Long, blkCount() As Long, nBlk As Long) As Boolean
+
+            Dim rd As Object
+            Dim ln As String
+            Dim cardName As String
+            Dim inNSM As Boolean
+            Dim nLines As Long
+
+            CacheNSM = False
+            nBlk = 0
+            nLines = 0
+            ReDim blkLines(1023)
+            ReDim blkStart(255)
+            ReDim blkCount(255)
+            inNSM = False
+
+            If Not fso.FileExists(wholeFile) Then Exit Function
+
+            Set rd = fso.OpenTextFile(wholeFile, 1)
+            Do While Not rd.AtEndOfStream
+                        ln = rd.ReadLine
+
+                        If IsNewCard(ln) Then
+                                    cardName = CardNameOf(ln)
+                                    If Left(cardName, 3) = "NSM" Then
+                                                If nBlk > UBound(blkStart) Then
+                                                            ReDim Preserve blkStart(nBlk * 2)
+                                                            ReDim Preserve blkCount(nBlk * 2)
+                                                End If
+                                                blkStart(nBlk) = nLines
+                                                blkCount(nBlk) = 0
+                                                nBlk = nBlk + 1
+                                                inNSM = True
+                                    Else
+                                                inNSM = False
+                                    End If
+                        End If
+
+                        If inNSM Then
+                                    If nLines > UBound(blkLines) Then ReDim Preserve blkLines(nLines * 2)
+                                    blkLines(nLines) = ln
+                                    nLines = nLines + 1
+                                    blkCount(nBlk - 1) = blkCount(nBlk - 1) + 1
+                        End If
+            Loop
+            rd.Close
+
+            CacheNSM = (nBlk > 0)
+
+End Function
+
+' -----------------------------------------------------------------------------
+' Pick the cached NSM blocks that belong to one group. No file access.
+'
+' A block is copied only if EVERY element it references is in the group. That is
+' decided from the block's own ID list, so no mapping from card back to region
+' is needed.
 '
 ' Partial containment is SKIPPED, not trimmed. For the total-mass forms
 ' (NSML/NSML1) the value is a total to distribute over the listed elements, so
@@ -959,59 +1033,26 @@ End Function
 ' is visible; a wrong mass is not.
 '
 ' NSMADD references SIDs rather than elements, so it is copied only when every
-' SID it names was itself copied.
+' SID it names was itself copied - which is why the blocks are walked in file
+' order, with the NSMADD naturally coming after what it combines.
 ' -----------------------------------------------------------------------------
-Function HarvestNSM(fso As Object, wholeFile As String, elemSet As femap.Set, _
-                    App As Object, outLines() As String, nOut As Long, report As String) As Boolean
+Function HarvestNSM(blkLines() As String, blkStart() As Long, blkCount() As Long, nBlk As Long, _
+                    elemSet As femap.Set, outLines() As String, nOut As Long, report As String) As Boolean
 
-            Dim rd As Object
-            Dim ln As String
-            Dim blk() As String
-            Dim nBlk As Long
-            Dim cardName As String
-            Dim inNSM As Boolean
+            Dim b As Long
             Dim sidsKept As String
             Dim nSkipped As Long
             Dim skipWhy As String
 
-            HarvestNSM = False
             nOut = 0
             nSkipped = 0
             sidsKept = ""
             skipWhy = ""
-            ReDim blk(63)
-            nBlk = 0
-            inNSM = False
 
-            If Not fso.FileExists(wholeFile) Then
-                        report = "whole-model file missing"
-                        Exit Function
-            End If
-
-            Set rd = fso.OpenTextFile(wholeFile, 1)
-            Do While Not rd.AtEndOfStream
-                        ln = rd.ReadLine
-
-                        If IsNewCard(ln) Then
-                                    ' A new card ends whatever block was open.
-                                    If inNSM Then
-                                                EmitNSMBlock blk(), nBlk, elemSet, App, outLines(), nOut, sidsKept, nSkipped, skipWhy
-                                    End If
-                                    nBlk = 0
-                                    cardName = CardNameOf(ln)
-                                    inNSM = (Left(cardName, 3) = "NSM")
-                        End If
-
-                        If inNSM Then
-                                    If nBlk > UBound(blk) Then ReDim Preserve blk(nBlk * 2)
-                                    blk(nBlk) = ln
-                                    nBlk = nBlk + 1
-                        End If
-            Loop
-            If inNSM Then
-                        EmitNSMBlock blk(), nBlk, elemSet, App, outLines(), nOut, sidsKept, nSkipped, skipWhy
-            End If
-            rd.Close
+            For b = 0 To nBlk - 1
+                        EmitNSMBlock blkLines(), blkStart(b), blkCount(b), elemSet, _
+                                     outLines(), nOut, sidsKept, nSkipped, skipWhy
+            Next b
 
             report = Trim(Str$(nOut)) & " line(s) copied"
             If nSkipped > 0 Then
@@ -1031,7 +1072,7 @@ End Function
 ' "THRU" expands to a range. "BY" is not expanded - a card using it is skipped
 ' and said so, rather than being copied on an assumption about the stride.
 ' -----------------------------------------------------------------------------
-Sub EmitNSMBlock(blk() As String, nBlk As Long, elemSet As femap.Set, App As Object, _
+Sub EmitNSMBlock(blk() As String, bStart As Long, nBlk As Long, elemSet As femap.Set, _
                  outLines() As String, nOut As Long, sidsKept As String, _
                  nSkipped As Long, skipWhy As String)
 
@@ -1051,7 +1092,7 @@ Sub EmitNSMBlock(blk() As String, nBlk As Long, elemSet As femap.Set, App As Obj
 
             If nBlk = 0 Then Exit Sub
 
-            cardName = CardNameOf(blk(0))
+            cardName = CardNameOf(blk(bStart))
             isAdd = (cardName = "NSMADD")
 
             ReDim ids(255)
@@ -1062,7 +1103,7 @@ Sub EmitNSMBlock(blk() As String, nBlk As Long, elemSet As femap.Set, App As Obj
             allIn = True
 
             For i = 0 To nBlk - 1
-                        SplitCardFields blk(i), (i > 0), fld(), nFld
+                        SplitCardFields blk(bStart + i), (i > 0), fld(), nFld
                         For f = 0 To nFld - 1
                                     v = Trim(fld(f))
                                     If Len(v) = 0 Then GoTo NextField
@@ -1117,7 +1158,7 @@ NextField:
             If allIn Then
                         For i = 0 To nBlk - 1
                                     If nOut > UBound(outLines) Then ReDim Preserve outLines(nOut * 2)
-                                    outLines(nOut) = blk(i)
+                                    outLines(nOut) = blk(bStart + i)
                                     nOut = nOut + 1
                         Next i
                         If Not isAdd And Len(sid) > 0 Then sidsKept = sidsKept & " " & sid & " "
