@@ -168,9 +168,10 @@ Sub Main
     Dim badSet As femap.Set
     Set badSet = App.feSet
 
-    Dim tgtIDs() As Long, tgtCTE() As Double
+    Dim tgtIDs() As Long, tgtCTE() As Double, tgtName() As String
     ReDim tgtIDs(nR - 1)
     ReDim tgtCTE(nR - 1)
+    ReDim tgtName(nR - 1)
     Dim nTgt As Long
     nTgt = 0
 
@@ -274,6 +275,7 @@ Sub Main
             ElseIf nCte = 1 Then
                 tgtIDs(nTgt) = rIDs(i)
                 tgtCTE(nTgt) = cteVals(0)
+                tgtName(nTgt) = cteNames(0)
                 nTgt = nTgt + 1
             Else
                 nConflict = nConflict + 1
@@ -351,10 +353,52 @@ Sub Main
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
     App.feAppMessage(FCM_HIGHLIGHT, "  RBE2 CTE from Material - Summary")
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
-    App.feAppMessage(FCM_NORMAL,    "  Rigids examined:       " + Trim$(Str$(nR)))
-    App.feAppMessage(FCM_NORMAL,    "  Resolved to one CTE:   " + Trim$(Str$(nTgt)))
+    App.feAppMessage(FCM_NORMAL,    "  Elements examined:     " + Trim$(Str$(nR)))
+    App.feAppMessage(FCM_NORMAL,    "  RBE2 resolved:         " + Trim$(Str$(nTgt)))
     If Not dryRun Then
         App.feAppMessage(FCM_NORMAL, "  CTE written:           " + Trim$(Str$(nWrote)))
+    End If
+
+    ' --- what was actually applied, and to how many ---
+    '
+    ' The per-element count is the point. "142 RBE2 got the aluminium CTE, 38
+    ' got the steel one" is checkable against what you expect the model to look
+    ' like; a single total is not.
+    If nTgt > 0 Then
+        Dim uCTE(63) As Double
+        Dim uName(63) As String
+        Dim uCount(63) As Long
+        Dim nU As Long
+        nU = 0
+        For i = 0 To nTgt - 1
+            Dim hit As Long
+            hit = -1
+            For j = 0 To nU - 1
+                If SameCTE(uCTE(j), tgtCTE(i), tolPct) Then
+                    hit = j
+                    Exit For
+                End If
+            Next j
+            If hit >= 0 Then
+                uCount(hit) = uCount(hit) + 1
+            ElseIf nU <= UBound(uCTE) Then
+                uCTE(nU) = tgtCTE(i)
+                uName(nU) = tgtName(i)
+                uCount(nU) = 1
+                nU = nU + 1
+            End If
+        Next i
+
+        If dryRun Then
+            App.feAppMessage(FCM_HIGHLIGHT, "  CTE that WOULD be applied:")
+        Else
+            App.feAppMessage(FCM_HIGHLIGHT, "  CTE applied:")
+        End If
+        For j = 0 To nU - 1
+            App.feAppMessage(FCM_NORMAL, "    " + Format$(uCTE(j), "0.0000E+00") _
+                + "   " + Right$("     " + Trim$(Str$(uCount(j))), 5) + " RBE2" _
+                + "   (" + uName(j) + ")")
+        Next j
     End If
     If nConflict > 0 Then
         App.feAppMessage(FCM_ERROR,  "  CONFLICTS (skipped):   " + Trim$(Str$(nConflict)))

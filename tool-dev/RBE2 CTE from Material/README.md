@@ -36,6 +36,21 @@ The comparison is **relative**, with a tolerance you set on the dialog (default 
       2.3400E-05   4 - AL 7075-T7351
 ```
 
+## The summary says what was applied, not just how many
+
+A single "wrote 180 elements" total isn't checkable. The report breaks it down by the value actually applied, so it can be read against what you expect the model to contain:
+
+```
+  Elements examined:     214
+  RBE2 resolved:         180
+  CTE written:           180
+  CTE applied:
+    1.2600E-05     142 RBE2   (12 - A286 CRES)
+    2.3400E-05      38 RBE2   (4 - AL 7075-T7351)
+```
+
+In **Report only** mode the same block appears as `CTE that WOULD be applied`, so a dry run tells you the whole outcome before anything is written.
+
 ## "No material found" is not a conflict
 
 A spider attached only to other rigids, to mass elements, or to plot-only elements has nothing to read. That's reported on its own line, separately from conflicts — a spider with no material is a different problem from one with too many.
