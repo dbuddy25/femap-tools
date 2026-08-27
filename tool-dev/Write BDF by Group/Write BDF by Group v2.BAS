@@ -374,6 +374,12 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
             nNSMseen = 0
             nNSMkept = 0
 
+            ' Which names, not just how many. NSMADD combines NSM sets, so a
+            ' deck with NSM1 but no NSMADD - or the reverse - is broken in a way
+            ' a single total would hide completely.
+            Dim nsmNames As String
+            nsmNames = ""
+
             FixFile = False
             dropSummary = ""
 
@@ -542,6 +548,9 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
                                     If Left(cardName, 3) = "NSM" Then
                                                 nNSMseen = nNSMseen + 1
                                                 If Not skipping Then nNSMkept = nNSMkept + 1
+                                                If InStr(nsmNames, " " & cardName & " ") = 0 Then
+                                                            nsmNames = nsmNames & " " & cardName & " "
+                                                End If
                                     End If
 
                                     If Not skipping Then nKept = nKept + 1
@@ -552,10 +561,16 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
                         End If
             Loop
 
-            App.feAppMessage(FCM_NORMAL, "  NSM cards in Femap's output: " & Trim(Str$(nNSMseen)) _
+            App.feAppMessage(FCM_NORMAL, "  NSM-family cards in Femap's output: " & Trim(Str$(nNSMseen)) _
                         & ", kept: " & Trim(Str$(nNSMkept)))
             If nNSMseen = 0 Then
-                        App.feAppMessage(FCM_WARNING, "  Femap wrote no NSM cards for this group - nothing was filtered out here.")
+                        App.feAppMessage(FCM_WARNING, "  Femap wrote no NSM, NSM1, NSML, NSML1 or NSMADD for this group.")
+                        App.feAppMessage(FCM_WARNING, "  Nothing was filtered out here - they never arrived.")
+            Else
+                        App.feAppMessage(FCM_NORMAL, "  Card names seen:" & nsmNames)
+                        If InStr(nsmNames, " NSMADD ") = 0 Then
+                                    App.feAppMessage(FCM_WARNING, "  No NSMADD - the NSM sets are not combined.")
+                        End If
             End If
 
             dropSummary = Trim(Str$(nEigrl)) & " EIGRL, " & _
