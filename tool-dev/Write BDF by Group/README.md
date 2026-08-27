@@ -163,6 +163,18 @@ $ Initial export for the -3 config                <- typed before that
 GRID           1       0  1.2345 ...
 ```
 
+### The Femap banner sits AFTER `BEGIN BULK`
+
+Not before it, which is where it looks like it should be. That one fact caused a long run of wrong fixes, so it's worth stating plainly:
+
+- `hdr()` captures comments *before* `BEGIN BULK`, so it came back **empty**. There was never anything to match a banner against.
+- The banner was therefore copied as ordinary bulk-data comment text, landing at the top of the `.bdf` right under the analyst's notes — exactly where a carried-over note sits, which is why it read as a carry-over bug for so long.
+- On the next export those lines are in the leading `$` run, so they were read back as *notes* and carried forward while Femap supplied a fresh copy. That was the stacking.
+
+It's now dropped **structurally, not by matching its text**. The block opens and closes with a rule line — `$` followed by nothing but asterisks — so the rule is: the first such block after `BEGIN BULK`, before any real card has been seen, is the banner. Restricting it to before the first card leaves an asterisk rule you write further down the deck untouched.
+
+Files that already contain a copied-in banner get it stripped the same way on the next export, since a rule-fenced block in the leading `$` run is recognised there too.
+
 ### The Femap banner is not written
 
 It used to carry Femap's version, the source model and the export date. That turned out not to be worth the space — and dropping it removed the only thing a re-export had to identify.

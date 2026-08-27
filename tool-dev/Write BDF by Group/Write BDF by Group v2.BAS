@@ -555,20 +555,59 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
 
             ' --- copy the bulk data, dropping the dummy-analysis cards --------
             '
-            ' EVERY comment line is kept, unconditionally. Femap's "$ ..." labels
-            ' sit above real bulk data, so there is nothing to gain by deciding
-            ' which ones to drop - and an earlier version that tried to (letting
-            ' a comment share the fate of the following card) could only ever
-            ' lose text that was wanted. A stray label above a removed PARAM is
-            ' harmless; a missing label is not.
+            ' EVERY comment line is kept, with ONE exception below. Femap's
+            ' "$ ..." labels sit above real bulk data, so there is nothing to
+            ' gain by deciding which ones to drop - and an earlier version that
+            ' tried to (letting a comment share the fate of the following card)
+            ' could only ever lose text that was wanted. A stray label above a
+            ' removed PARAM is harmless; a missing label is not.
+            '
+            ' *** THE EXCEPTION: FEMAP'S BANNER SITS AFTER "BEGIN BULK" ***
+            ' Not before it, which is where it looks like it should be. That one
+            ' fact caused a long run of wrong fixes:
+            '
+            '   - hdr() captures comments BEFORE "BEGIN BULK", so it comes back
+            '     EMPTY. There was never anything to match a banner against.
+            '   - The banner was then copied as ordinary bulk-data comment text,
+            '     landing at the top of the .bdf right under the analyst's notes
+            '     - exactly where a carried-over note would sit, which is why it
+            '     read as a carry-over bug for so long.
+            '   - On the next export those lines are in the leading "$" run, so
+            '     they were read back as NOTES and carried forward, while Femap
+            '     supplied a fresh copy. That is the stacking.
+            '
+            ' It is dropped structurally rather than by matching its text. The
+            ' block opens and closes with a rule line - "$" then nothing but
+            ' asterisks - so the rule is: the FIRST such block after BEGIN BULK,
+            ' before any real card has been seen, is the banner. Restricting it
+            ' to before the first card means an asterisk rule the analyst writes
+            ' further down the deck is untouched.
+            Dim inBanner As Boolean
+            Dim seenCard As Boolean
+            Dim nBannerDropped As Long
+            inBanner = False
+            seenCard = False
+            nBannerDropped = 0
+
             skipping = False
             Do While Not readOld.AtEndOfStream
                         textLine = readOld.ReadLine
 
                         If Left(LTrim(textLine), 1) = "$" Then
-                                    writeNew.WriteLine textLine
-                                    nComment = nComment + 1
+                                    If inBanner Then
+                                                ' Inside the banner - drop it, and close on the
+                                                ' rule line that ends it.
+                                                nBannerDropped = nBannerDropped + 1
+                                                If IsRuleLine(textLine) Then inBanner = False
+                                    ElseIf Not seenCard And IsRuleLine(textLine) Then
+                                                inBanner = True
+                                                nBannerDropped = nBannerDropped + 1
+                                    Else
+                                                writeNew.WriteLine textLine
+                                                nComment = nComment + 1
+                                    End If
                         Else
+                                    seenCard = True
                         ' --- not a comment: a card line or a continuation -----
 
                         If IsNewCard(textLine) Then
@@ -640,6 +679,10 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
                         App.feAppMessage(FCM_NORMAL, "  Contact cards written: " & Trim(Str$(nCon)) & "  " & conNames)
             Else
                         App.feAppMessage(FCM_NORMAL, "  Contact cards written: none")
+            End If
+
+            If nBannerDropped > 0 Then
+                        App.feAppMessage(FCM_NORMAL, "  Femap banner dropped: " & Trim(Str$(nBannerDropped)) & " line(s)")
             End If
 
             dropSummary = Trim(Str$(nEigrl)) & " EIGRL, " & _
@@ -737,7 +780,14 @@ End Function
 ' to tell notes apart from. Every "$" line is a note. No boundary, no marker, no
 ' pattern matching - which is where every bug in this area came from.
 '
-' THE ONLY EXCEPTION IS CLEANING UP AFTER OLDER BUILDS
+' TWO EXCEPTIONS, BOTH CLEANING UP AFTER OLDER BUILDS
+'
+' First: a rule-fenced banner. Femap writes its banner AFTER "BEGIN BULK", so
+' older builds copied it into the bulk data as ordinary comment text, where it
+' landed at the top of the .bdf right under the notes. Those lines are in the
+' leading "$" run of such a file and would otherwise be read straight back as
+' notes. A block fenced by rule lines - "$" then nothing but asterisks - is
+' dropped.
 ' Files exported before this change still contain a banner, and it would
 ' otherwise be read back as a pile of notes and carried forward forever. So a
 ' line is dropped if it matches one of hdr() - Femap's banner for THIS export,
@@ -762,6 +812,7 @@ Function ExistingNotes(fso As Object, path As String, hdr() As String, nHdr As L
             Dim nRaw As Long
             Dim i As Long, j As Long
             Dim marked As Boolean
+            Dim oldBanner As Boolean
             Dim cut As Long
             Dim isBanner As Boolean
             Dim out As String
@@ -770,6 +821,7 @@ Function ExistingNotes(fso As Object, path As String, hdr() As String, nHdr As L
             ReDim raw(255)
             nRaw = 0
             marked = False
+            oldBanner = False
             cut = -1
             out = ""
             nKept = 0
@@ -811,6 +863,15 @@ Function ExistingNotes(fso As Object, path As String, hdr() As String, nHdr As L
                         ElseIf Left(ln, Len(OLD_NOTES_END)) = OLD_NOTES_END Then
                                     nDropped = nDropped + 1
                         ElseIf Left(LTrim(ln), 22) = "$ Exported from group:" Then
+                                    nDropped = nDropped + 1
+                        ElseIf oldBanner Then
+                                    ' Inside a rule-fenced banner left in the file by an
+                                    ' earlier build - drop it, and close on the rule line
+                                    ' that ends it.
+                                    nDropped = nDropped + 1
+                                    If IsRuleLine(ln) Then oldBanner = False
+                        ElseIf IsRuleLine(ln) Then
+                                    oldBanner = True
                                     nDropped = nDropped + 1
                         Else
                                     isBanner = False
@@ -860,5 +921,40 @@ Function IsContactCard(cardName As String) As Boolean
                         Or cardName = "BGSET" Or cardName = "BGADD" _
                         Or cardName = "BCTSET" Or cardName = "BCTADD" _
                         Or cardName = "BGPARM")
+
+End Function
+
+' -----------------------------------------------------------------------------
+' A rule line: "$" followed by nothing but asterisks and spaces.
+'
+' Femap opens and closes its banner with one of these - a "$" and 75 asterisks.
+' Matching on the shape rather than on the text between the rules means this
+' does not depend on what the banner says, only on how it is fenced.
+' -----------------------------------------------------------------------------
+Function IsRuleLine(ln As String) As Boolean
+
+            Dim t As String
+            Dim i As Long
+            Dim c As String
+            Dim nStar As Long
+
+            IsRuleLine = False
+            t = Trim(ln)
+            If Left(t, 1) <> "$" Then Exit Function
+
+            t = Mid(t, 2)
+            nStar = 0
+            For i = 1 To Len(t)
+                        c = Mid(t, i, 1)
+                        If c = "*" Then
+                                    nStar = nStar + 1
+                        ElseIf c <> " " Then
+                                    Exit Function
+                        End If
+            Next i
+
+            ' A handful of asterisks is a divider somebody typed; a long run is
+            ' Femap fencing its banner.
+            IsRuleLine = (nStar >= 10)
 
 End Function
