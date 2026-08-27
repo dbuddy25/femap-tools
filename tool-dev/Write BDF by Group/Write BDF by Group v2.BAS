@@ -23,7 +23,8 @@
 ' - Re-exporting over an existing .bdf now PRESERVES the notes already in it.
 '   New custom lines are written ABOVE the retained ones, so the header reads
 '   newest-first, while Femap's own banner (version / model / date) and the
-'   "Exported from group" line are regenerated every run.
+'   "Exported from group" line were regenerated every run. Both were dropped
+'   entirely on 20260827 - see below.
 ' - "Exported from group" moved out of the custom-header block. It was being
 '   written as a user note, so re-exporting the same group would have stacked
 '   an identical copy of that line on every single run.
@@ -444,9 +445,10 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
 
             ' --- skip everything up to and including BEGIN BULK ---------------
             '
-            ' The "$" banner is kept: it carries the Femap version, the source
-            ' model and the export date, which is exactly the provenance an
-            ' INCLUDE file should carry.
+            ' The "$" banner is captured but NOT written to the .bdf. It is used
+            ' only to recognise and strip the banner out of a file exported by an
+            ' older build - same Femap, same model, so nearly every line matches
+            ' character-for-character. See ExistingNotes.
             '
             ' EVERY comment before BEGIN BULK is taken, not just the leading run.
             ' A first attempt captured only the first contiguous block of "$"
@@ -547,8 +549,7 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
             ' across an overwrite fails silently otherwise, and is only noticed
             ' months later when they are already gone.
             '
-            ' nCarried = 0 on a re-export means nothing was carried;
-            ' nHdr = 0 means the Femap banner was not captured.
+            ' nCarried = 0 on a re-export means nothing was carried.
             App.feAppMessage(FCM_NORMAL, "  Notes: " & Trim(Str$(nNew)) & " new, " & _
                         Trim(Str$(nCarried)) & " carried over   [" & notesReport & "]")
 
@@ -645,8 +646,7 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
                           Trim(Str$(nCord)) & " global CORD2C/S, " & _
                           Trim(Str$(nParam)) & " PARAM   (" & _
                           Trim(Str$(nKept)) & " cards kept, " & _
-                          Trim(Str$(nHdr)) & " header + " & _
-                          Trim(Str$(nComment)) & " inline comments kept)"
+                          Trim(Str$(nComment)) & " comments kept)"
 
             readOld.Close
             writeNew.Close
