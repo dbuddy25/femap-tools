@@ -14,6 +14,11 @@
 '   cylindrical/spherical). Previously the count-based skip would take whatever
 '   happened to sit in those line positions, including a user coordinate system.
 ' - FixFile reports failure instead of writing a truncated file.
+' 20260827
+' - The Femap banner is no longer written into the .bdf. Every "$" line in the
+'   header is a note, so carrying them forward needs no boundary, no marker and
+'   no pattern matching. Banners left in files by older builds are stripped on
+'   the next export by comparing against Femap's output for that run.
 ' 20260826
 ' - Re-exporting over an existing .bdf now PRESERVES the notes already in it.
 '   New custom lines are written ABOVE the retained ones, so the header reads
@@ -517,12 +522,16 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
             '
             '   this run's custom lines
             '   ... every note carried over from previous exports ...
-            '   Femap's provenance banner + the group line, regenerated
             '
-            ' Nothing marks the boundary - the file is plain comments. A
-            ' re-export finds it by walking UP from the bulk data through the
-            ' banner, which is a contiguous run of recognisable shapes sitting at
-            ' the bottom of the header. See ExistingNotes.
+            ' That is the whole header. Femap's provenance banner is NOT written:
+            ' the version and date it carried were not worth the space, and not
+            ' writing it removes the only thing a re-export had to identify.
+            ' Every "$" line in the header is now a note, so carrying them
+            ' forward needs no boundary, no marker and no pattern matching -
+            ' which is where every bug in this area came from.
+            '
+            ' hdr() is still read from Femap's output, but only to strip the
+            ' banner out of files written by an older build. See ExistingNotes.
             Dim custLines() As String
             Dim ci As Long
             Dim nNew As Long, nCarried As Long
@@ -552,10 +561,6 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
                         Next ci
             End If
 
-            For hi = 0 To nHdr - 1
-                        writeNew.WriteLine hdr(hi)
-            Next hi
-            writeNew.WriteLine "$ Exported from group: " & grpTitle
 
             ' The notes themselves are echoed above, newest first and marked
             ' "+" - that is where they are meant to be READ. Carrying notes
@@ -565,8 +570,7 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
             ' nCarried = 0 on a re-export means nothing was carried;
             ' nHdr = 0 means the Femap banner was not captured.
             App.feAppMessage(FCM_NORMAL, "  Notes: " & Trim(Str$(nNew)) & " new, " & _
-                        Trim(Str$(nCarried)) & " carried over, " & _
-                        Trim(Str$(nHdr)) & " Femap banner line(s)   [" & notesReport & "]")
+                        Trim(Str$(nCarried)) & " carried over   [" & notesReport & "]")
 
             ' --- copy the bulk data, dropping the dummy-analysis cards --------
             '
@@ -753,31 +757,25 @@ End Function
 ' Pull the analyst's notes out of an already-exported .bdf so a re-export can
 ' carry them forward. Returns them Chr$(10)-separated, order preserved.
 '
-' HOW THE BANNER IS IDENTIFIED - BY COMPARISON, NOT BY GUESSWORK
-' The caller has just read Femap's banner for THIS export into hdr(). The
-' previous export's banner is the same thing from the same Femap against the
-' same model, so nearly every line is character-for-character identical; only
-' the date moves.
+' EVERY COMMENT IS A NOTE
+' The Femap banner is no longer written, so there is nothing else in the header
+' to tell notes apart from. Every "$" line is a note. No boundary, no marker, no
+' pattern matching - which is where every bug in this area came from.
 '
-' So a line in the old file is banner if it matches one of hdr() exactly, or if
-' its first 16 characters do - that prefix covers "$   Date       :" and friends
-' while stopping short of the value that changes.
+' THE ONLY EXCEPTION IS CLEANING UP AFTER OLDER BUILDS
+' Files exported before this change still contain a banner, and it would
+' otherwise be read back as a pile of notes and carried forward forever. So a
+' line is dropped if it matches one of hdr() - Femap's banner for THIS export,
+' from the same Femap against the same model, so nearly every line is
+' character-for-character identical and only the date moves. A 16-character
+' prefix match covers "$   Date       :" while stopping short of the value that
+' changes. Marker scaffolding and "$ Exported from group:" lines from those
+' builds are dropped by name.
 '
-' This replaced a set of hardcoded patterns ("Written by", "Version", a rule of
-' asterisks, ...) that were WRITTEN FROM MEMORY OF WHAT FEMAP EMITS, never
-' checked against a real file. They did not match, so every re-export kept the
-' previous banner as a note and appended a fresh one, and the header grew a
-' banner per run. Comparing against output Femap just produced needs no
-' knowledge of what the banner says.
-'
-' Lines this tool writes itself ("$ Exported from group:") are known text and
-' are dropped by name.
+' Once a file has been re-exported once, none of that applies to it again.
 '
 ' BIAS: an unmatched line is KEPT. Losing a note is unrecoverable; a stray line
 ' appears in the Messages echo on the next run and can be deleted.
-'
-' Files from earlier builds carry explicit markers. Those are still honoured as
-' a hard boundary and their scaffolding dropped.
 '
 ' Reading stops at the first non-comment line - below that is bulk data.
 ' -----------------------------------------------------------------------------
@@ -863,8 +861,10 @@ Function ExistingNotes(fso As Object, path As String, hdr() As String, nHdr As L
                         End If
             Next i
 
-            report = Trim(Str$(nKept)) & " note(s) kept, " & _
-                     Trim(Str$(nDropped)) & " banner line(s) dropped"
+            report = Trim(Str$(nKept)) & " note(s) kept"
+            If nDropped > 0 Then
+                        report = report & ", " & Trim(Str$(nDropped)) & " old banner line(s) stripped"
+            End If
 
             ExistingNotes = out
 

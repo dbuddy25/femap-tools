@@ -46,23 +46,22 @@ The options dialog has three optional free-text lines. Whatever you type lands a
 
 Three single-line boxes rather than one multiline box: every `TextBox` in this toolset is single-line, and this is not the script to try unproven dialog syntax on.
 
-### Femap comments
-
-The **Femap provenance banner** — Femap version, source model, export date — is carried over to the top of the `.bdf`. It sits before `BEGIN BULK`, so the header skip would otherwise discard it, and it is exactly the information an include file should state about its own origin.
-
-**Every** comment line before `BEGIN BULK` is taken. A first attempt kept only the leading contiguous `$` block, assuming the banner sat at the very top — it doesn't, and nothing was captured at all. Femap wraps executive control (`ID` / `SOL` / `CEND`) around the comments, so the only reliable rule is "a comment in the header is header text". If that pulls in a line you don't want, it's a filter on a known string, not a positional guess.
+### Comment lines
 
 `$` comment lines in the bulk data are **kept unconditionally** — every one, no exceptions.
 
 Femap's labels sit above real bulk data, so there is nothing to gain by deciding which to drop. An intermediate version buffered comments and let each share the fate of the card below it; that could only ever lose text that was wanted. A stray label above a removed `PARAM` is harmless — a missing label is not.
 
+Femap's provenance banner is **not** carried into the export. See [Header notes](#header-notes).
+
 Every export prints a tally of what it removed:
 
 ```
-Removed: 1 EIGRL, 2 global CORD2C/S, 7 PARAM   (4213 cards kept, 6 header + 812 inline comments kept)
+Removed: 1 EIGRL, 2 global CORD2C/S, 7 PARAM   (4213 cards kept, 812 inline comments kept)
 ```
 
 That tally exists because the original failure was invisible. If a card type ever starts arriving that shouldn't, the count moves and you can see it — rather than finding out when a deck won't run.
+
 
 ## Output folder
 
@@ -122,71 +121,56 @@ $ NSM cards below were copied from a whole-model export.
 $ Femap does not write them for a group-filtered export.
 ```
 
-## Re-exporting: notes are preserved (2026-08-26)
+## Header notes
 
-Exporting a group over an existing `.bdf` no longer wipes what was in its header. The tool reads the file it is about to overwrite, carries the notes forward, and writes this run's custom lines **above** them — so the header reads newest-first, like a log.
+Exporting a group over an existing `.bdf` keeps whatever notes were in its header and writes this run's lines **above** them, so the header reads newest-first, like a log.
 
-Femap's own banner (version / source model / date) and the `Exported from group:` line are **regenerated** every export, not carried, so they always describe the current export rather than accumulating one copy per run.
-
-The resulting header looks like:
+The header is nothing but those notes:
 
 ```
 $ Revised bracket thickness per ECO-4471          <- typed this run
 $ Added CBUSH fasteners at the aft splice         <- typed a previous run
 $ Initial export for the -3 config                <- typed before that
-$--- Femap banner below is regenerated on every export
-$ ***************************************************
-$   Written by : Femap
-$   Version    : 2306
-$   From Model : C:\work\wing.modfem
-$   Date       : Wed Aug 26 ...
-$ ***************************************************
-$ Exported from group: Aft Splice Bracket
+GRID           1       0  1.2345 ...
 ```
 
-### How the banner is identified — by comparison, not guesswork
+### The Femap banner is not written
 
-Nothing is inserted into the file to mark where your notes end. Instead, the tool compares against Femap's output for *this* export, which it has just read.
+It used to carry Femap's version, the source model and the export date. That turned out not to be worth the space — and dropping it removed the only thing a re-export had to identify.
 
-The previous export's banner came from the same Femap against the same model, so nearly every line is character-for-character identical — only the date moves. A line in the old file is therefore banner if it matches one of this run's banner lines exactly, or if its first 16 characters do (that prefix covers `$   Date       :` while stopping short of the value that changes). Lines this tool writes itself, like `$ Exported from group:`, are known text and dropped by name.
+With no banner, every `$` line in the header is a note. No boundary to find, no marker line, no pattern matching. Every bug this area produced came from trying to tell the two apart; there is now nothing to tell apart.
 
-This replaced a set of hardcoded patterns — `Written by`, `Version`, a rule of asterisks, and so on — that were written from memory of what Femap emits and never checked against a real file. They didn't match, so every re-export kept the previous banner as a note *and* appended a fresh one, and the header grew a banner per run. Comparing against output Femap just produced needs no knowledge of what the banner actually says.
+Files exported by an older build still contain a banner. It's stripped on the next export by comparing against Femap's output for that run — same Femap, same model, so nearly every line matches character-for-character and only the date moves. Marker scaffolding from those builds is dropped by name. After one re-export none of that applies to the file again, and the Messages line reports what it removed:
 
-An unmatched line is **kept**. Losing a note is unrecoverable; a stray line shows up in the Messages echo on the next run and can be deleted.
+```
+  Notes: 1 new, 2 carried over   [3 note(s) kept, 9 old banner line(s) stripped]
+```
 
-### Files from the previous build
+An unmatched line is **kept**. Losing a note is unrecoverable; a stray line shows up in the Messages echo and can be deleted.
 
-Earlier versions inserted marker lines — first a three-line scheme (`$>>> EXPORT NOTES` / `$<<< END EXPORT NOTES` / `$--- FEMAP BANNER`), then a single `$--- Femap banner below is regenerated...`. Files carrying either are still read exactly: the marker is honoured as a hard boundary and the scaffolding lines are dropped rather than carried forward as notes. They clean themselves up on the next export; nothing to fix by hand.
+### Duplicate notes
 
-### Older files (written before notes were preserved at all)
+Nothing de-duplicates. Re-running an export with the same text still in the dialog boxes stacks a second identical line. Clear the boxes on a re-export unless you want a new entry.
 
-A `.bdf` with no markers falls back to classifying each `$` line, and the rule is deliberately lopsided: a line is dropped **only if it positively matches a shape Femap emits** (`Written by`, `Version`, `Translator`, `From Model`, `Date`, `Output To`, a rule of `***`, or the old `Exported from group:` line). Anything unrecognised is kept.
-
-So the worst case is a stale banner line carried across once — visible, harmless, and self-correcting, since markers exist from that export onward. The opposite bias would silently eat a note you wrote, which is not recoverable. The Messages line flags these runs as `LEGACY file (no markers)` so you can eyeball the header once.
 
 ### The notes are listed in the Messages window every run
 
 The file is where the notes *live*; the Messages window is where you **read** them. Every export echoes the full set, newest first, with this run's additions marked `+`:
 
 ```
-  Notes in C:\work\Model\Group_Aft Splice Bracket.bdf:
+  Notes in C:\work\Group_Aft Splice Bracket.bdf:
     + Revised bracket thickness per ECO-4471
       Added CBUSH fasteners at the aft splice
       Initial export for the -3 config
-  Notes: 1 new, 2 carried over, 9 Femap banner line(s)   [marked file: 2 note(s) kept, 8 banner line(s) dropped]
+  Notes: 1 new, 2 carried over   [3 note(s) kept]
 ```
 
 Not behind a debug flag, because carrying notes across an overwrite is exactly the kind of thing that fails silently and only gets noticed once the notes are already gone. Each run states what it did:
 
 | Reading | Meaning |
 |---|---|
-| `0 carried over` on a re-export | Nothing was carried — check the previous file actually has the markers |
-| `0 Femap banner line(s)` | The banner was not captured from the temp file |
-| `LEGACY file (no markers)` | First re-export of a pre-2026-08-26 file — eyeball the header once |
-
-### Duplicate notes
-
-Nothing de-duplicates. Re-running an export with the same text still typed in the dialog boxes will stack a second identical line. Clear the boxes on a re-export unless you want a new entry.
+| `0 carried over` on a re-export | Nothing was carried forward — the previous file's header was empty or unreadable |
+| `old banner line(s) stripped` | First re-export of a file written before the banner was dropped. Expected once, then never again |
 
 ## Verifying against a real file
 
