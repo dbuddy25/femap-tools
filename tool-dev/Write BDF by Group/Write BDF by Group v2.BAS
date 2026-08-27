@@ -1,4 +1,4 @@
-' Write_bdf_by_Group.BAS
+' Write BDF by Group v2.BAS
 '
 ' Change History
 ' 20240404
