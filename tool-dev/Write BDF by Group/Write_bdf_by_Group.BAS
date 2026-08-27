@@ -126,7 +126,7 @@ Begin Dialog UserDialog 400,412,"Options" 'NasBulkLargeField %GRID:10,7,1,1
             CancelButton 220,364,120,35
 End Dialog
 Dim dlg As UserDialog
-dlg.chkSub = 1
+dlg.chkSub = 0
 dlg.subBox = "Model"
 UserFormat = Dialog(dlg)
 
@@ -141,10 +141,12 @@ sao.NasBulkLargeField = UserFormat
 
             ' --- where the files go -------------------------------------------
             '
-            ' Default is a "Model" subfolder of wherever the model lives, which
-            ' is the usual habit - a group export drops one file per group and
-            ' they bury the model file otherwise. Untick to write beside the
-            ' model as before.
+            ' Off by default: the export lands beside the model, which is where
+            ' this tool has always put it, and changing where a shared tool
+            ' writes without being asked is how someone loses a deck. Tick it and
+            ' the box is already filled in with "Model" - one click for the
+            ' common case, since a group export drops one file per group and
+            ' they bury the model file otherwise.
             '
             ' A value containing ":" is taken as a full path and used as-is, so
             ' the same box handles "send it somewhere else entirely" without a

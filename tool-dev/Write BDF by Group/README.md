@@ -66,9 +66,7 @@ That tally exists because the original failure was invisible. If a card type eve
 
 ## Output folder
 
-A checkbox on the options dialog writes the exported files into a subfolder of the model's folder, defaulting to **`Model`** and ticked. A group export drops one file per group, which buries the model file otherwise.
-
-Untick it to write beside the model, as before. The folder is created if it doesn't exist, and the run aborts with a message rather than writing somewhere unexpected if it can't be. A value containing a drive letter (`D:\shared\decks`) is treated as a full path and used as-is, so the same box also handles sending the export somewhere else entirely.
+A checkbox on the options dialog writes the exported files into a subfolder of the model's folder. It is **off by default** — the export lands beside the model, as it always has. Tick it and the box is already filled in with **`Model`**, so the common case is one click; a group export drops one file per group and buries the model file otherwise. The folder is created if it doesn't exist, and the run aborts with a message rather than writing somewhere unexpected if it can't be. A value containing a drive letter (`D:\shared\decks`) is treated as a full path and used as-is, so the same box also handles sending the export somewhere else entirely.
 
 
 ## Nonstructural mass: NSM lives on a Region, not on elements
