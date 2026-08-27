@@ -36,14 +36,48 @@ Sub Main
     Dim rc As Long
 
     ' =============================================
-    ' Step 1: Write full NX Nastran deck to temp file
+    ' Step 1: Write a genuinely FULL NX Nastran deck
+    '
+    ' *** THE ACTIVE ANALYSIS SET CANNOT BE TRUSTED TO BE UNFILTERED ***
+    ' feFileWriteNastran writes whatever the active analysis set says, and that
+    ' set may carry NasBulkGroupID pointing at a single group. Write BDF by
+    ' Group leaves exactly such a set behind if it is cancelled part way - so
+    ' running this afterwards silently exported ONE group and reported honestly
+    ' that it found no NSM, because that group's cards were filtered out.
+    '
+    ' A whole-model tool must not inherit a filter it did not set. This builds
+    ' its own analysis set with NasBulkGroupID = 0, uses it, then deletes it and
+    ' puts the previous active set back.
     ' =============================================
+    Dim sao As Object
+    Set sao = App.feAnalysisMgr
+    Dim saoID As Long
+    Dim prevActive As Long
+    prevActive = sao.Active
+
+    saoID = sao.NextEmptyID
+    sao.title = "Temp Set for NSM Export"
+    sao.Solver = 36                 ' NX Nastran
+    sao.AnalysisType = 2            ' Modes - least extra data written
+    sao.NasBulkOn = True
+    sao.NasBulkGroupID = 0          ' 0 = entire model. This is the whole point.
+    rc = sao.Put(saoID)
+    If rc <> FE_OK Then
+        App.feAppMessage(FCM_ERROR, "Could not create a temporary analysis set - exiting")
+        Exit Sub
+    End If
+    sao.Active = saoID
+
     Dim tempFile As String
     tempFile = Environ$("TEMP") + "\femap_nsm_export_temp.dat"
     rc = App.feFileWriteNastran(8, tempFile)
+
+    ' Put the model back the way it was before anything else can go wrong.
+    If prevActive > 0 Then sao.Active = prevActive
+    If sao.Deletable(saoID) Then sao.Delete(saoID)
+
     If rc <> FE_OK Then
         App.feAppMessage(FCM_ERROR, "Failed to write NX Nastran file (rc=" + CStr(rc) + ")")
-        App.feAppMessage(FCM_ERROR, "Ensure an NX Nastran analysis set is configured.")
         Exit Sub
     End If
 
@@ -193,8 +227,8 @@ NextLine:
         App.feAppMessage(FCM_NORMAL, "  File:                  " + fName)
     Else
         App.feAppMessage(FCM_WARNING, "  No NSM cards in the deck.")
-        App.feAppMessage(FCM_WARNING, "  Either the model has no nonstructural mass, or the active")
-        App.feAppMessage(FCM_WARNING, "  analysis set is filtering it out - check Bulk Data Options.")
+        App.feAppMessage(FCM_WARNING, "  The export was unfiltered (its own analysis set, whole model),")
+        App.feAppMessage(FCM_WARNING, "  so this means the model genuinely has no nonstructural mass.")
     End If
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
 

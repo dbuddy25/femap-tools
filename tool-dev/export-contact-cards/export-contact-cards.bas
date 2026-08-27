@@ -10,12 +10,41 @@ Sub Main
     ' =============================================
     ' Step 1: Write full NX Nastran deck to temp file
     ' =============================================
+    ' *** THE ACTIVE ANALYSIS SET CANNOT BE TRUSTED TO BE UNFILTERED ***
+    ' feFileWriteNastran writes whatever the active analysis set says, and that
+    ' set may carry NasBulkGroupID pointing at a single group - Write BDF by
+    ' Group leaves exactly such a set behind if it is cancelled part way. A
+    ' whole-model tool must not inherit a filter it did not set, or it quietly
+    ' exports one group and reports honestly that it found nothing.
+    Dim sao As Object
+    Set sao = App.feAnalysisMgr
+    Dim saoID As Long
+    Dim prevActive As Long
+    prevActive = sao.Active
+
+    saoID = sao.NextEmptyID
+    sao.title = "Temp Set for Contact Export"
+    sao.Solver = 36                 ' NX Nastran
+    sao.AnalysisType = 2            ' Modes - least extra data written
+    sao.NasBulkOn = True
+    sao.NasBulkGroupID = 0          ' 0 = entire model
+    rc = sao.Put(saoID)
+    If rc <> FE_OK Then
+        App.feAppMessage(FCM_ERROR, "Could not create a temporary analysis set - exiting")
+        Exit Sub
+    End If
+    sao.Active = saoID
+
     Dim tempFile As String
     tempFile = Environ$("TEMP") + "\femap_contact_export_temp.dat"
     rc = App.feFileWriteNastran(8, tempFile)
+
+    ' Put the model back before anything else can go wrong.
+    If prevActive > 0 Then sao.Active = prevActive
+    If sao.Deletable(saoID) Then sao.Delete(saoID)
+
     If rc <> FE_OK Then
         App.feAppMessage(FCM_ERROR, "Failed to write NX Nastran file (rc=" + CStr(rc) + ")")
-        App.feAppMessage(FCM_ERROR, "Ensure an NX Nastran analysis set is configured.")
         Exit Sub
     End If
 

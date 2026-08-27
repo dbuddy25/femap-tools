@@ -31,9 +31,17 @@ into one file and include it once from the master deck.
 
 Cards are copied **verbatim**. Generating `NSM1`/`NSML1` from the region data would mean deciding which card a given `MassType` maps to, what goes in the TYPE field, and how SIDs are assigned — three things reconstructed from the Nastran spec that could be quietly wrong in a deck that still runs. Femap's own output is the specification.
 
+## It builds its own analysis set
+
+`feFileWriteNastran` writes whatever the **active** analysis set says — including `NasBulkGroupID`, which filters the deck to a single group. *Write BDF by Group* leaves exactly such a set behind if it's cancelled part way through, so running this afterwards silently exported one group and then reported, honestly, that it found no NSM.
+
+A whole-model tool must not inherit a filter it didn't set. This creates its own analysis set with `NasBulkGroupID = 0`, uses it, then deletes it and restores the previously active set.
+
+That also makes the empty result meaningful: if it reports no NSM cards, the model genuinely has none.
+
 ## How it works
 
-1. Writes a full NX Nastran deck to a temp file.
+1. Creates a temporary unfiltered analysis set and writes a full NX Nastran deck to a temp file.
 2. Prompts for the output `.bdf` name.
 3. Copies every `NSM*` card, its continuations, and the comment labelling it.
 4. Deletes the temp file and reports.
@@ -62,6 +70,5 @@ If nothing is found, the report says so and names the two possible reasons rathe
 
 ## Known gaps
 
-- Reads whatever the active analysis set produces. If that set filters NSM out, so does this.
 - No `On Error` handler.
 - The output is not checked against the model — a card count is not proof the mass is right.
