@@ -104,32 +104,30 @@ grSet.SelectMultiID(FT_GROUP,1,"Select Group(s)")
 
 'Promts user for field format
 Dim UserFormat As Integer
-Begin Dialog UserDialog 400,430,"Options" 'NasBulkLargeField %GRID:10,7,1,1
-            GroupBox 5,0,300,100,"Select Field Format",.GroupBox1
-                        ListBox 20,21,200,75,FFormat(),.ListBox1
-            GroupBox 5,120,300,70,"Is Group Name already the bdf file Name?",.GroupBox2
+Begin Dialog UserDialog 560,392,"Write BDF by Group - Options" 'NasBulkLargeField %GRID:10,7,1,1
+            GroupBox 8,4,268,108,"Field format",.GroupBox1
+                        ListBox 20,24,248,80,FFormat(),.ListBox1
+            GroupBox 284,4,268,108,"Group name is already the file name?",.GroupBox2
                         OptionGroup.Group1
-                        OptionButton 50,135,150,21,"No",.OptionButton1
-                        OptionButton 50,160,150,21,"Yes",.OptionButton2
+                        OptionButton 300,30,236,20,"No",.OptionButton1
+                        OptionButton 300,58,236,20,"Yes",.OptionButton2
             ' Three single-line boxes rather than one multiline box: every
             ' TextBox in this toolset is single-line, and this is not the script
             ' to try unproven dialog syntax on.
-            GroupBox 5,196,385,92,"Custom header comments (optional)",.GroupBox3
-                        TextBox 15,214,365,18,.hdr1
-                        TextBox 15,236,365,18,.hdr2
-                        TextBox 15,258,365,18,.hdr3
-            GroupBox 5,292,385,64,"Output folder",.GroupBox4
-                        CheckBox 15,308,175,14,"Write into a subfolder:",.chkSub
-                        TextBox  196,306,184,18,.subBox
-                        Text     15,330,365,20,"Relative to the model folder, and created if it does not exist. A full path (one containing a drive letter) is used as-is."
-            CheckBox 5,362,385,14,"Keep Femap's raw temp file (to see what Femap actually wrote)",.chkKeepTemp
-            OKButton 70,382,120,35
-            CancelButton 220,382,120,35
+            GroupBox 8,122,544,116,"Header comments (optional)",.GroupBox3
+                        TextBox 20,144,520,22,.hdr1
+                        TextBox 20,172,520,22,.hdr2
+                        TextBox 20,200,520,22,.hdr3
+            GroupBox 8,246,544,76,"Output folder",.GroupBox4
+                        CheckBox 20,268,200,16,"Write into a subfolder:",.chkSub
+                        TextBox  226,264,314,22,.subBox
+                        Text     20,294,520,20,"Relative to the model folder, created if missing. A full path (with a drive letter) is used as-is."
+            OKButton 160,340,120,34
+            CancelButton 300,340,120,34
 End Dialog
 Dim dlg As UserDialog
 dlg.chkSub = 0
 dlg.subBox = "Model"
-dlg.chkKeepTemp = 0
 UserFormat = Dialog(dlg)
 
 If UserFormat = -1 Then 'user pressed ok
@@ -256,12 +254,8 @@ sao.NasBulkLargeField = UserFormat
                                     If fixOK Then
                                                 App.feAppMessage(FCM_COMMAND,"Replaced lines and saved as bdf: " & grFileName & ".bdf")
                                                 App.feAppMessage(FCM_COMMAND,"  Removed: " & dropInfo)
-                                                If dlg.chkKeepTemp <> 0 Then
-                                                            App.feAppMessage(FCM_WARNING,"Kept Femap's raw temp file: " & grFileName)
-                                                Else
-                                                            DeleteTempFile(grFileName)  'Function that deletes the temporary file
-                                                            App.feAppMessage(FCM_COMMAND,"Deleted original file: " & grFileName)
-                                                End If
+                                                DeleteTempFile(grFileName)  'Function that deletes the temporary file
+                                                App.feAppMessage(FCM_COMMAND,"Deleted original file: " & grFileName)
                                     Else
                                                 ' The temp file is deliberately KEPT here - if the header could not be
                                                 ' parsed, the raw Femap output is the only way to see what happened.

@@ -90,8 +90,6 @@ The tool reports two numbers that tell the causes apart outright:
 
 Note that exporting the **whole analysis** and seeing NSM cards does not settle this: that export isn't group-filtered, so it only proves the model has NSM and Femap can write it. The numbers above are from the group-filtered write, which is the one that matters.
 
-A **Keep Femap's raw temp file** checkbox on the options dialog preserves the untouched Femap output next to the `.bdf`, for when the counts aren't enough.
-
 **Fix:** add the Region to the group — `Group → Set → <group>`, then `Group → Region`.
 
 One API trap worth recording, since it makes this check silently useless if you get it wrong: **`FT_CONTACT` (58) is a Femap *Region*; `FT_CONNECTION` (71) is the *Connector* (contact pair).** The names read backwards from what you would guess.

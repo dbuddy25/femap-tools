@@ -120,13 +120,11 @@ Sub Main
         cj = cj + 1
     Loop
 
-    Begin Dialog CsysDlg 360, 148, "Group Mass Properties"
-        Text        12, 12, 336, 24, "Mass, CG and inertia are reported in the coordinate system chosen here."
-        Text        12, 46, 110, 12, "Coordinate system:"
-        DropListBox 126, 44, 222, 160, csNames(), .csPick
-        Text        12, 70, 336, 32, "Inertia is reported about each group's own CG. The totals row shifts to the combined CG using the parallel-axis theorem."
-        OKButton     94, 112, 80, 20
-        CancelButton 194, 112, 80, 20
+    Begin Dialog CsysDlg 340, 88, "Group Mass Properties"
+        Text        12, 18, 108, 12, "Coordinate system:"
+        DropListBox 124, 16, 204, 180, csNames(), .csPick
+        OKButton     84, 52, 80, 20
+        CancelButton 184, 52, 80, 20
     End Dialog
 
     Dim cdlg As CsysDlg
