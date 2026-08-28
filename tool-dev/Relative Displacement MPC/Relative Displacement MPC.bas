@@ -622,7 +622,7 @@ Function ShowTriads(App As Object, gfxSet As Long, csysID As Long, _
     ShowTriads = FE_FAIL
 
     ' --- the three axis directions, in global rectangular ---
-    Dim dir(2, 2) As Double
+    Dim axDir(2, 2) As Double
     Dim org(2) As Double
     Dim p(2) As Double
     Dim vIn As Variant, vOut As Variant
@@ -644,7 +644,7 @@ Function ShowTriads(App As Object, gfxSet As Long, csysID As Long, _
         rc = App.feCoordTransform(csysID, vIn, 0, vOut)
         If rc <> FE_OK Then Exit Function
         For k = 0 To 2
-            dir(a, k) = CDbl(vOut(k)) - org(k)
+            axDir(a, k) = CDbl(vOut(k)) - org(k)
         Next k
     Next a
 
@@ -658,17 +658,19 @@ Function ShowTriads(App As Object, gfxSet As Long, csysID As Long, _
     cols(1) = FCL_GREEN
     cols(2) = FCL_BLUE
 
-    Dim ax As Long
+    ' Named axNo, not ax: WinWrap identifiers are case-insensitive, so a
+    ' variable called ax IS the aX parameter above and the script will not load.
+    Dim axNo As Long
     For a = 0 To 5
         If a < 3 Then
             arw.x = aX : arw.y = aY : arw.z = aZ
         Else
             arw.x = bX : arw.y = bY : arw.z = bZ
         End If
-        ax = a Mod 3
-        arw.dx = dir(ax, 0)
-        arw.dy = dir(ax, 1)
-        arw.dz = dir(ax, 2)
+        axNo = a Mod 3
+        arw.dx = axDir(axNo, 0)
+        arw.dy = axDir(axNo, 1)
+        arw.dz = axDir(axNo, 2)
         ' 1 = Scaled to view, so the triad stays visible at any model scale -
         ' and, critically, still draws when A and B are coincident and there is
         ' no separation distance to size it from.
@@ -678,7 +680,7 @@ Function ShowTriads(App As Object, gfxSet As Long, csysID As Long, _
         ' the node instead of ending there.
         arw.location = 0.0
         arw.style = 1
-        arw.color = cols(ax)
+        arw.color = cols(axNo)
         arw.layer = 1
         If arw.Put(a + 1) <> FE_OK Then Exit Function
     Next a
