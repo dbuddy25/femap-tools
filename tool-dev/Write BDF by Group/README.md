@@ -150,6 +150,28 @@ The card list matches [`export-contact-cards`](../export-contact-cards/): `BSURF
 
 If it turns out they are dropped, the NSM recovery mechanism generalizes — but not for free. `BSURF`/`BSURFS` list elements and would use the containment test that already exists; `BCPROP`/`BCPROPS` reference properties and need a new one; `BGSET`/`BCTSET`/`BGADD` reference region SIDs, the same shape as `NSMADD`.
 
+## Constraint equations (MPC)
+
+Fixed 2026-08-28. Before that this tool **could not export a constraint equation at all**, and
+said nothing about it.
+
+The export does not run through your analysis set. It runs through the throwaway
+`Dummy Set for Group Export` that step 1 builds, activates, and deletes again at the end — so
+selecting constraint equations in the Analysis Set Manager has no effect on what this tool
+writes. The dummy never set `BCSet[1]`, the slot that names the constraint set holding the
+equations (separate from `BCSet[0]`, which names constraints), and an unset slot means Femap
+writes no `MPC` cards: no warning, no empty section, nothing.
+
+The dummy set now selects the **active constraint set** in `BCSet[1]`, and the Messages window
+says which one. `BCSet[0]` is deliberately left alone — pulling constraints into a per-group
+INCLUDE would duplicate SPCs the master deck already carries.
+
+**The group filter still applies.** `NasBulkGroupID` limits the deck to the entities in that
+group, and that governs equations exactly as it governs elements: an equation is written only
+if the nodes it references are in the group being exported. Instrumentation that lives outside
+your part groups — a relative-displacement tracking node, for example — will still be dropped
+unless you add those nodes to the group.
+
 ## Header notes
 
 Exporting a group over an existing `.bdf` keeps whatever notes were in its header and writes this run's lines **above** them, so the header reads newest-first, like a log.

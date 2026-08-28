@@ -110,6 +110,29 @@ saoID = sao.NextEmptyID   'Finds next available ID to make analysis set in
             sao.NasCnlSkipNLPARM = True 'Skips more unneeded data to be written out
             'sao.SkipStandard = True ' !!! This will skip connections for NX NASTRAN !!!
 
+            ' --- constraint equations (MPC) ------------------------------------
+            '
+            ' *** THE EXPORT RUNS THROUGH THIS DUMMY SET, NOT THE USER'S ***
+            ' Which means every "select it in the Analysis Set Manager" fix is
+            ' irrelevant here: the deck is written by the throwaway set built
+            ' above, activated, and deleted again at the end. Whatever the real
+            ' analysis set selects never enters into it.
+            '
+            ' An analysis set names its constraint equations in BCSet[1], which
+            ' is a SEPARATE slot from BCSet[0] constraints. Left at 0 - which is
+            ' what a fresh object has - no set is selected and Femap writes no
+            ' MPC cards at all, with no warning and no empty section. So this
+            ' tool could never export a constraint equation.
+            '
+            ' Only [1] is set. BCSet[0] is deliberately left alone: pulling
+            ' constraints into a per-group INCLUDE would duplicate SPCs the
+            ' master deck already carries.
+            Dim eqSetID As Long
+            eqSetID = App.Info_ActiveID(FT_BC_DIR)   ' FT_BC_DIR = 17, constraint SET
+            If eqSetID > 0 Then
+                        sao.BCSet(1) = eqSetID
+            End If
+
             'All Field format types stored in strings
             Dim FFormat(5) As String
             FFormat(0) = "Small Field"
@@ -265,6 +288,16 @@ sao.NasBulkLargeField = UserFormat
                         End If
             End If
 
+
+            If eqSetID > 0 Then
+                        App.feAppMessage(FCM_NORMAL, "Constraint equations: constraint set " _
+                                    & Trim(Str$(eqSetID)) & " selected for export")
+                        App.feAppMessage(FCM_NORMAL, "  An equation is still only written if ALL of its")
+                        App.feAppMessage(FCM_NORMAL, "  nodes are in the group - the group filter applies")
+                        App.feAppMessage(FCM_NORMAL, "  to equations the same as it does to elements.")
+            Else
+                        App.feAppMessage(FCM_WARNING, "No active constraint set - no MPC cards will be written")
+            End If
 
             Dim fixOK As Boolean
             Dim dropInfo As String
