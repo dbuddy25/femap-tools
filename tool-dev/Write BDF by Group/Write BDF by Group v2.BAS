@@ -127,8 +127,51 @@ saoID = sao.NextEmptyID   'Finds next available ID to make analysis set in
             ' Only [1] is set. BCSet[0] is deliberately left alone: pulling
             ' constraints into a per-group INCLUDE would duplicate SPCs the
             ' master deck already carries.
+            ' *** DO NOT ASK WHICH SET IS ACTIVE - ASK WHICH SET HAS EQUATIONS ***
+            ' Info_ActiveID(FT_BC_DIR) returns 0 whenever no constraint set has
+            ' been made active, which is the normal state of a model nobody has
+            ' clicked through. A first version of this keyed off the active set,
+            ' so it did nothing at all and said nothing about it - the export
+            ' came out with no MPC cards exactly as before.
+            '
+            ' The set that holds the equations is the thing that matters, and it
+            ' is directly measurable: CountSet on a BCEqn scoped to each set.
             Dim eqSetID As Long
-            eqSetID = App.Info_ActiveID(FT_BC_DIR)   ' FT_BC_DIR = 17, constraint SET
+            Dim eqCount As Long
+            Dim nEqSets As Long
+            Dim bcProbe As Object
+            Dim eqProbe As Object
+            Dim activeBC As Long
+            eqSetID = 0
+            eqCount = 0
+            nEqSets = 0
+            Set bcProbe = App.feBCSet
+            Set eqProbe = App.feBCEqn
+
+            ' Prefer the active set, but only if it actually holds equations.
+            activeBC = App.Info_ActiveID(FT_BC_DIR)
+            If activeBC > 0 Then
+                        eqProbe.SetID = activeBC
+                        If eqProbe.CountSet() > 0 Then
+                                    eqSetID = activeBC
+                                    eqCount = eqProbe.CountSet()
+                        End If
+            End If
+
+            ' Count every set that holds equations either way - more than one
+            ' means only some of them can be selected, which the user must know.
+            bcProbe.Reset
+            Do While bcProbe.Next()
+                        eqProbe.SetID = bcProbe.ID
+                        If eqProbe.CountSet() > 0 Then
+                                    nEqSets = nEqSets + 1
+                                    If eqSetID = 0 Then
+                                                eqSetID = bcProbe.ID
+                                                eqCount = eqProbe.CountSet()
+                                    End If
+                        End If
+            Loop
+
             If eqSetID > 0 Then
                         sao.BCSet(1) = eqSetID
             End If
@@ -290,13 +333,19 @@ sao.NasBulkLargeField = UserFormat
 
 
             If eqSetID > 0 Then
-                        App.feAppMessage(FCM_NORMAL, "Constraint equations: constraint set " _
-                                    & Trim(Str$(eqSetID)) & " selected for export")
+                        App.feAppMessage(FCM_NORMAL, "Constraint equations: set " _
+                                    & Trim(Str$(eqSetID)) & " selected, " & Trim(Str$(eqCount)) & " equation(s)")
                         App.feAppMessage(FCM_NORMAL, "  An equation is still only written if ALL of its")
                         App.feAppMessage(FCM_NORMAL, "  nodes are in the group - the group filter applies")
                         App.feAppMessage(FCM_NORMAL, "  to equations the same as it does to elements.")
+                        If nEqSets > 1 Then
+                                    App.feAppMessage(FCM_WARNING, "  " & Trim(Str$(nEqSets)) _
+                                                & " constraint sets hold equations. Only set " _
+                                                & Trim(Str$(eqSetID)) & " is written -")
+                                    App.feAppMessage(FCM_WARNING, "  a case selects ONE set in its equation slot.")
+                        End If
             Else
-                        App.feAppMessage(FCM_WARNING, "No active constraint set - no MPC cards will be written")
+                        App.feAppMessage(FCM_WARNING, "No constraint set holds any equations - no MPC cards")
             End If
 
             Dim fixOK As Boolean

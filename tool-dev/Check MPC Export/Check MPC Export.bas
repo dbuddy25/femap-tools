@@ -185,11 +185,15 @@ Sub Main
     ' ============================================================
     Dim grSet As femap.Set
     Set grSet = App.feSet
-    rc = grSet.SelectID(FT_GROUP, "Group to test the group filter against", 0)
+    ' Parameter 3 is an OUT param. Passing a literal 0 for it is a type
+    ' mismatch - there is nothing for Femap to write the picked ID back into.
+    Dim pickedGrp As Long
+    pickedGrp = 0
+    rc = grSet.SelectID(FT_GROUP, "Group to test the group filter against", pickedGrp)
     Dim probeGroup As Long
     probeGroup = 0
     If rc = FE_OK Then
-        probeGroup = grSet.First()
+        probeGroup = pickedGrp
     End If
 
     If probeGroup <= 0 Then

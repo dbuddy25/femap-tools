@@ -484,8 +484,13 @@ Sub Main
                 App.feAppMessage(FCM_ERROR, "Could not create the constraint set - exiting")
                 Exit Sub
             End If
+            ' Make it active. A model where no constraint set is active reports
+            ' an active ID of 0, and anything downstream that keys off "the
+            ' active constraint set" then silently does nothing - which is
+            ' exactly how these equations first failed to reach a deck.
+            bsNew.Active = bcSetID
             App.feAppMessage(FCM_NORMAL, "Created constraint set " + Trim$(Str$(bcSetID)) _
-                + " - Relative Displacement")
+                + " - Relative Displacement (now active)")
         End If
 
         ' --- the measurement node, at the midpoint ---
