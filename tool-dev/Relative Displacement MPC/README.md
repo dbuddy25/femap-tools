@@ -61,8 +61,21 @@ A nodal DOF is expressed in that node's **output** coordinate system, not in glo
 Otherwise it subtracts motion along one direction from motion along a different one and
 returns a number that means nothing.
 
-So the tool gates: **A and B must share an output CSys, and it must be rectangular.** The
-measurement node is created with that same `outCSys` by default, so all three agree.
+So the tool gates: **both output systems must be rectangular and must have the same
+orientation.** The measurement node takes node A's by default, so all three agree.
+
+The test is on **orientation, not CSys ID**. Two systems with different IDs — and different
+origins — but parallel axes resolve T1/T2/T3 along the same physical directions, so
+subtracting them is perfectly valid and the pair is accepted, with a note in the Messages
+window saying the tool checked. A DOF direction depends only on how a system is turned, never
+on where it sits, which is why origins are ignored entirely. Comparing IDs would reject
+correct work.
+
+Orientation is compared by transforming each system's origin and unit points into global and
+differencing, then matching the three axis vectors component-wise to 1e-6 (about 0.00006°).
+Aligned systems agree to rounding, so anything looser than that really is a different
+orientation, while the tolerance is still slack enough to survive a CSys built by picking
+geometry.
 
 **Overriding the tracking node's output CSys relabels the answer — it does not rotate it.**
 The MPC equates DOF *numbers*: `u_M(T1) = u_A(T1) - u_B(T1)`, and those A and B terms resolve

@@ -39,9 +39,12 @@
 ' along one direction from a displacement along a different one and returns a
 ' plausible-looking number that means nothing.
 '
-' The tool therefore GATES on it: A and B must have the same outCSys, and that
-' system must be RECTANGULAR. The measurement node is then created with the same
-' outCSys, so all three nodes agree.
+' The tool therefore GATES on it: both output systems must be RECTANGULAR and
+' must have the same ORIENTATION. Note orientation, not ID - two systems with
+' different IDs and different origins but parallel axes resolve T1/T2/T3 along
+' the same physical directions, so subtracting them is valid and the pair is
+' accepted. A DOF direction depends on how a system is turned, not where it
+' sits. The measurement node then takes node A's outCSys.
 '
 ' Cylindrical and spherical systems are rejected rather than handled. Their
 ' directions are position-dependent - the radial direction at A does not point
@@ -242,8 +245,6 @@ Sub Main
     Set ndB = App.feNode
     Dim ndM As femap.Node
     Set ndM = App.feNode
-    Dim cs As femap.CSys
-    Set cs = App.feCSys
     Dim eq As Object
     Set eq = App.feBCEqn
 
@@ -262,7 +263,10 @@ Sub Main
     Dim aX As Double, aY As Double, aZ As Double
     Dim bX As Double, bY As Double, bZ As Double
     Dim aOut As Long, bOut As Long
-    Dim csType As Long, csName As String
+    Dim csName As String
+    Dim aType As Long, bType As Long
+    Dim aCSName As String, bCSName As String
+    Dim align As Long
     Dim mOut As Long
     Dim csMismatch As Boolean
     Dim sep As Double
@@ -306,47 +310,63 @@ Sub Main
             GoTo NextPair
         End If
 
-        ' --- gate: shared, rectangular output CSys ---
-        If aOut <> bOut Then
-            App.feAppMessage(FCM_WARNING, "Nodes " + Trim$(Str$(aID)) + " and " _
-                + Trim$(Str$(bID)) + " have different output CSys (" _
-                + Trim$(Str$(aOut)) + " vs " + Trim$(Str$(bOut)) + ") - pair skipped")
-            App.feAppMessage(FCM_NORMAL, "      Their T1/T2/T3 point in different directions," _
-                + " so the subtraction would be meaningless.")
+        ' --- gate: rectangular output CSys, ALIGNED between the two nodes ---
+        '
+        ' What matters is ORIENTATION, not the CSys ID. Two different systems
+        ' that happen to be parallel resolve T1/T2/T3 along the same physical
+        ' directions, so subtracting them is perfectly valid - and rejecting
+        ' that pair on an ID comparison would be refusing correct work.
+        ' Origins are irrelevant: a DOF direction does not depend on where the
+        ' system is, only on how it is turned.
+        aType = CSysInfo(App, aOut, aCSName)
+        bType = CSysInfo(App, bOut, bCSName)
+
+        If aType < 0 Or bType < 0 Then
+            App.feAppMessage(FCM_WARNING, "Could not read the output CSys of node " _
+                + Trim$(Str$(aID)) + " or " + Trim$(Str$(bID)) + " - pair skipped")
             nSkipped = nSkipped + 1
             GoTo NextPair
         End If
 
-        ' CSys 0/1/2 are the predefined globals and cannot be Get - and they are
-        ' 0=Rectangular, 1=Cylindrical, 2=Spherical, so the ID IS the type.
-        If aOut <= 2 Then
-            csType = aOut
-            If aOut = 0 Then
-                csName = "0 - Global Rectangular"
-            ElseIf aOut = 1 Then
-                csName = "1 - Global Cylindrical"
-            Else
-                csName = "2 - Global Spherical"
-            End If
-        Else
-            If cs.Get(aOut) <> FE_OK Then
-                App.feAppMessage(FCM_WARNING, "Could not read CSys " + Trim$(Str$(aOut)) _
-                    + " - pair skipped")
-                nSkipped = nSkipped + 1
-                GoTo NextPair
-            End If
-            csType = cs.type
-            csName = Trim$(Str$(aOut)) + " - " + cs.title
-        End If
-
-        If csType <> 0 Then
-            App.feAppMessage(FCM_WARNING, "Output CSys " + csName _
-                + " is not rectangular - pair " + Trim$(Str$(aID)) + "/" _
-                + Trim$(Str$(bID)) + " skipped")
+        If aType <> 0 Then
+            App.feAppMessage(FCM_WARNING, "Node " + Trim$(Str$(aID)) + " output CSys " _
+                + aCSName + " is not rectangular - pair skipped")
             App.feAppMessage(FCM_NORMAL, "      Radial and theta directions depend on position," _
                 + " so they differ at A and at B.")
             nSkipped = nSkipped + 1
             GoTo NextPair
+        End If
+        If bType <> 0 Then
+            App.feAppMessage(FCM_WARNING, "Node " + Trim$(Str$(bID)) + " output CSys " _
+                + bCSName + " is not rectangular - pair skipped")
+            nSkipped = nSkipped + 1
+            GoTo NextPair
+        End If
+
+        If aOut = bOut Then
+            csName = aCSName
+        Else
+            align = SameOrientation(App, aOut, bOut)
+            If align < 0 Then
+                App.feAppMessage(FCM_WARNING, "Could not compare CSys " + Trim$(Str$(aOut)) _
+                    + " and " + Trim$(Str$(bOut)) + " - pair skipped")
+                nSkipped = nSkipped + 1
+                GoTo NextPair
+            End If
+            If align = 0 Then
+                App.feAppMessage(FCM_WARNING, "Nodes " + Trim$(Str$(aID)) + " and " _
+                    + Trim$(Str$(bID)) + " have output CSys " + Trim$(Str$(aOut)) + " and " _
+                    + Trim$(Str$(bOut)) + ", which are NOT aligned - pair skipped")
+                App.feAppMessage(FCM_NORMAL, "      Their T1/T2/T3 point in different directions," _
+                    + " so the subtraction would be meaningless.")
+                nSkipped = nSkipped + 1
+                GoTo NextPair
+            End If
+            ' Different systems, same orientation - allowed, and said out loud
+            ' so it is clear the tool noticed rather than missed it.
+            csName = Trim$(Str$(aOut)) + " / " + Trim$(Str$(bOut)) + " (aligned)"
+            App.feAppMessage(FCM_NORMAL, "  CSys " + Trim$(Str$(aOut)) + " and " _
+                + Trim$(Str$(bOut)) + " differ by ID but are aligned - accepted")
         End If
 
         sep = Sqr((aX - bX) * (aX - bX) + (aY - bY) * (aY - bY) + (aZ - bZ) * (aZ - bZ))
@@ -365,7 +385,15 @@ Sub Main
             csMismatch = False
         Else
             mOut = wantOutCS
-            csMismatch = (mOut <> aOut)
+            If mOut = aOut Then
+                csMismatch = False
+            Else
+                ' Same test as the gate: an override to a system that is merely
+                ' a different ID but the same orientation changes nothing, and
+                ' warning about it would be crying wolf.
+                align = SameOrientation(App, mOut, aOut)
+                csMismatch = (align <> 1)
+            End If
         End If
 
         If csMismatch Then
@@ -727,32 +755,15 @@ Function ShowTriads(App As Object, gfxSet As Long, csysID As Long, _
 
     ' --- the three axis directions, in global rectangular ---
     Dim axDir(2, 2) As Double
-    Dim org(2) As Double
-    Dim p(2) As Double
-    Dim vIn As Variant, vOut As Variant
-    Dim rc As Long
-    Dim a As Long, k As Long
-
-    p(0) = 0.0 : p(1) = 0.0 : p(2) = 0.0
-    vIn = p
-    rc = App.feCoordTransform(csysID, vIn, 0, vOut)
-    If rc <> FE_OK Then Exit Function
-    For k = 0 To 2
-        org(k) = CDbl(vOut(k))
-    Next k
-
-    For a = 0 To 2
-        p(0) = 0.0 : p(1) = 0.0 : p(2) = 0.0
-        p(a) = 1.0
-        vIn = p
-        rc = App.feCoordTransform(csysID, vIn, 0, vOut)
-        If rc <> FE_OK Then Exit Function
-        For k = 0 To 2
-            axDir(a, k) = CDbl(vOut(k)) - org(k)
-        Next k
-    Next a
+    If AxesOf(App, csysID, _
+              axDir(0, 0), axDir(0, 1), axDir(0, 2), _
+              axDir(1, 0), axDir(1, 1), axDir(1, 2), _
+              axDir(2, 0), axDir(2, 1), axDir(2, 2)) <> FE_OK Then
+        Exit Function
+    End If
 
     ' --- six arrows: one triad at A, one at B ---
+    Dim a As Long
     Dim arw As Object
     Set arw = App.feGFXArrow
     arw.setID = gfxSet
@@ -834,5 +845,144 @@ Function PadTo(s As String, n As Long) As String
         out = out + " "
     Loop
     PadTo = out
+
+End Function
+
+
+' -----------------------------------------------------------------------------
+' The three axis unit vectors of a coordinate system, in global rectangular.
+'
+' Derived by transforming the system's origin and its three unit points into
+' global and differencing them. That is immune to the row/column ambiguity in
+' the documented direction-cosine matrix - api.pdf says CSys.matrix holds "the
+' rows stored sequentially" but never says whether a row is an axis or its
+' transpose, and a transposed answer is wrong in a way that still looks right.
+'
+' Nine ByRef Doubles rather than an array because passing a fixed array into an
+' arr() parameter is not reliable across Basic dialects.
+' -----------------------------------------------------------------------------
+Function AxesOf(App As Object, csysID As Long, _
+                xx As Double, xy As Double, xz As Double, _
+                yx As Double, yy As Double, yz As Double, _
+                zx As Double, zy As Double, zz As Double) As Long
+
+    AxesOf = FE_FAIL
+
+    Dim p(2) As Double
+    Dim org(2) As Double
+    Dim vIn As Variant, vOut As Variant
+    Dim rc As Long
+    Dim k As Long
+    Dim e(2, 2) As Double
+    Dim a As Long
+
+    p(0) = 0.0 : p(1) = 0.0 : p(2) = 0.0
+    vIn = p
+    rc = App.feCoordTransform(csysID, vIn, 0, vOut)
+    If rc <> FE_OK Then Exit Function
+    For k = 0 To 2
+        org(k) = CDbl(vOut(k))
+    Next k
+
+    For a = 0 To 2
+        p(0) = 0.0 : p(1) = 0.0 : p(2) = 0.0
+        p(a) = 1.0
+        vIn = p
+        rc = App.feCoordTransform(csysID, vIn, 0, vOut)
+        If rc <> FE_OK Then Exit Function
+        For k = 0 To 2
+            e(a, k) = CDbl(vOut(k)) - org(k)
+        Next k
+    Next a
+
+    xx = e(0, 0) : xy = e(0, 1) : xz = e(0, 2)
+    yx = e(1, 0) : yy = e(1, 1) : yz = e(1, 2)
+    zx = e(2, 0) : zy = e(2, 1) : zz = e(2, 2)
+
+    AxesOf = FE_OK
+
+End Function
+
+
+' -----------------------------------------------------------------------------
+' Do two coordinate systems have the same ORIENTATION?
+'
+' Returns 1 = aligned, 0 = not aligned, -1 = could not be evaluated.
+'
+' Origins are deliberately ignored. A nodal DOF direction depends only on how
+' the system is turned, not on where it sits, so two systems with different IDs
+' and different origins but parallel axes resolve T1/T2/T3 the same way and are
+' interchangeable for this purpose. Comparing IDs instead would reject correct
+' work - which is exactly what this tool used to do.
+'
+' TOL is per axis component. Aligned systems agree to rounding, so anything
+' this loose is genuinely a different orientation; 1e-6 is about 0.00006 deg,
+' tight enough to catch a real misalignment and slack enough to survive a CSys
+' that was built by picking geometry.
+' -----------------------------------------------------------------------------
+Function SameOrientation(App As Object, cs1 As Long, cs2 As Long) As Long
+
+    SameOrientation = -1
+
+    Dim TOL As Double
+    TOL = 0.000001
+
+    Dim ax1 As Double, ay1 As Double, az1 As Double
+    Dim bx1 As Double, by1 As Double, bz1 As Double
+    Dim cx1 As Double, cy1 As Double, cz1 As Double
+    Dim ax2 As Double, ay2 As Double, az2 As Double
+    Dim bx2 As Double, by2 As Double, bz2 As Double
+    Dim cx2 As Double, cy2 As Double, cz2 As Double
+
+    If AxesOf(App, cs1, ax1, ay1, az1, bx1, by1, bz1, cx1, cy1, cz1) <> FE_OK Then Exit Function
+    If AxesOf(App, cs2, ax2, ay2, az2, bx2, by2, bz2, cx2, cy2, cz2) <> FE_OK Then Exit Function
+
+    SameOrientation = 0
+    If Abs(ax1 - ax2) > TOL Then Exit Function
+    If Abs(ay1 - ay2) > TOL Then Exit Function
+    If Abs(az1 - az2) > TOL Then Exit Function
+    If Abs(bx1 - bx2) > TOL Then Exit Function
+    If Abs(by1 - by2) > TOL Then Exit Function
+    If Abs(bz1 - bz2) > TOL Then Exit Function
+    If Abs(cx1 - cx2) > TOL Then Exit Function
+    If Abs(cy1 - cy2) > TOL Then Exit Function
+    If Abs(cz1 - cz2) > TOL Then Exit Function
+
+    SameOrientation = 1
+
+End Function
+
+
+' -----------------------------------------------------------------------------
+' A coordinate system's type, with a display name out the side.
+'
+' Returns 0=Rectangular, 1=Cylindrical, 2=Spherical, or -1 if it could not be
+' read. IDs 0/1/2 are the predefined globals: they cannot be Get, and they are
+' rectangular / cylindrical / spherical in that order, so the ID is the type.
+' -----------------------------------------------------------------------------
+Function CSysInfo(App As Object, csysID As Long, csTitle As String) As Long
+
+    If csysID <= 2 Then
+        If csysID = 0 Then
+            csTitle = "0 - Global Rectangular"
+        ElseIf csysID = 1 Then
+            csTitle = "1 - Global Cylindrical"
+        Else
+            csTitle = "2 - Global Spherical"
+        End If
+        CSysInfo = csysID
+        Exit Function
+    End If
+
+    Dim cs As femap.CSys
+    Set cs = App.feCSys
+    If cs.Get(csysID) <> FE_OK Then
+        csTitle = Trim$(Str$(csysID)) + " - (unreadable)"
+        CSysInfo = -1
+        Exit Function
+    End If
+
+    csTitle = Trim$(Str$(csysID)) + " - " + cs.title
+    CSysInfo = cs.type
 
 End Function
