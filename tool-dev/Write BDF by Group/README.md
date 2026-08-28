@@ -2,7 +2,7 @@
 
 Exports each selected group to its own Nastran bulk-data file, ready to `INCLUDE`.
 
-**Last updated:** 2026-08-18
+**Last updated:** 2026-08-28
 **Status:** In use for ~2 years. `FixFile` rewritten 2026-08-18 to fix a silently dropped GRID card — **this change is untested**, see below.
 
 ## How it works
@@ -179,12 +179,19 @@ Files that already contain a copied-in banner get it stripped the same way on th
 
 It used to carry Femap's version, the source model and the export date. That turned out not to be worth the space — and dropping it removed the only thing a re-export had to identify.
 
-With no banner, every `$` line in the header is a note. No boundary to find, no marker line, no pattern matching. Every bug this area produced came from trying to tell the two apart; there is now nothing to tell apart.
+### The notes block needs an explicit end (fixed 2026-08-28)
+
+"Every `$` line above the bulk data is a note" was still not enough, and it produced one last version of the same bug. The exported `.bdf` is an **INCLUDE**: there is no `BEGIN BULK` in it and `ENDDATA` is commented out. So the notes run *straight* into the bulk data with nothing between them, and Femap's first entity label — `$ Femap Property 1 : ...` — sat directly beneath the last note. Reading the leading `$` run back therefore swallowed that label as a note and carried it forward on every re-export.
+
+Two changes, belt and braces:
+
+- The notes block is closed by a written delimiter, `$=== end of notes - Femap bulk data below ===`. A note is anything above it. That is the whole rule, and unlike the banner markers that came before, it delimits something the tool itself writes rather than trying to recognise something Femap wrote.
+- A comment beginning `$ Femap ` is **never** carried over. Femap labels every entity it writes, so those are bulk-data text by definition, never an analyst note. This also cleans up files exported before the delimiter existed, which already have one baked into their header.
 
 Files exported by an older build still contain a banner. It's stripped on the next export by comparing against Femap's output for that run — same Femap, same model, so nearly every line matches character-for-character and only the date moves. Marker scaffolding from those builds is dropped by name. After one re-export none of that applies to the file again, and the Messages line reports what it removed:
 
 ```
-  Notes: 1 new, 2 carried over   [3 note(s) kept, 9 old banner line(s) stripped]
+  Notes: 1 new, 2 carried over   [3 note(s) kept, 9 old banner line(s) stripped, 1 Femap comment(s) not carried]
 ```
 
 An unmatched line is **kept**. Losing a note is unrecoverable; a stray line shows up in the Messages echo and can be deleted.

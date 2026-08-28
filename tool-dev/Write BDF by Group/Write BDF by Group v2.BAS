@@ -14,11 +14,17 @@
 '   cylindrical/spherical). Previously the count-based skip would take whatever
 '   happened to sit in those line positions, including a user coordinate system.
 ' - FixFile reports failure instead of writing a truncated file.
+' 20260828
+' - The notes block is closed by a written delimiter line, and a Femap entity
+'   comment is never carried over as a note. "Every $ line above the bulk data
+'   is a note" was wrong: the .bdf is an INCLUDE, so there is no BEGIN BULK
+'   between the notes and the bulk data, and the first Femap "$" label sat
+'   directly under the notes. Reading the leading "$" run back therefore
+'   swallowed it, and re-exported it forever after.
 ' 20260827
-' - The Femap banner is no longer written into the .bdf. Every "$" line in the
-'   header is a note, so carrying them forward needs no boundary, no marker and
-'   no pattern matching. Banners left in files by older builds are stripped on
-'   the next export by comparing against Femap's output for that run.
+' - The Femap banner is no longer written into the .bdf. Banners left in files
+'   by older builds are stripped on the next export by comparing against
+'   Femap's output for that run.
 ' 20260826
 ' - Re-exporting over an existing .bdf now PRESERVES the notes already in it.
 '   New custom lines are written ABOVE the retained ones, so the header reads
@@ -33,16 +39,23 @@
 '   would be indistinguishable from silent loss.
 
 ' -----------------------------------------------------------------------------
-' Markers left in files by earlier builds. Nothing is written now.
+' Markers left in files by earlier builds, plus the one delimiter still written.
 ' -----------------------------------------------------------------------------
-' Scaffolding written by earlier builds. NOTHING is written into the file any
-' more - see ExistingNotes for how the banner is found without a marker - but
-' any .bdf already exported by those builds carries these lines, and without
-' recognising them they would be read back as notes and carried forward forever.
+' The OLD_ constants below are scaffolding from earlier builds and are never
+' written any more, but any .bdf already exported by those builds carries them,
+' and without recognising them they would be read back as notes and carried
+' forward forever.
 Const OLD_NOTES_BEGIN As String = "$>>> EXPORT NOTES"
 Const OLD_NOTES_END   As String = "$<<< END EXPORT NOTES"
 Const OLD_BANNER_MARK As String = "$--- FEMAP BANNER"
 Const OLD_BANNER_MK2  As String = "$--- Femap banner below is regenerated"
+
+' Closes the notes block. The written file is an INCLUDE - no BEGIN BULK, and
+' ENDDATA commented out - so the notes run straight into the bulk data with
+' nothing between them. Reading the leading "$" run back therefore swallowed the
+' first bulk comment as a note, and carried it forward on every re-export.
+' A note is now anything ABOVE this line, which needs no pattern matching.
+Const NOTES_END As String = "$=== end of notes - Femap bulk data below ==="
 
 Sub Main
 
@@ -508,9 +521,12 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
             ' That is the whole header. Femap's provenance banner is NOT written:
             ' the version and date it carried were not worth the space, and not
             ' writing it removes the only thing a re-export had to identify.
-            ' Every "$" line in the header is now a note, so carrying them
-            ' forward needs no boundary, no marker and no pattern matching -
-            ' which is where every bug in this area came from.
+            ' A note is anything above NOTES_END, which is the whole rule.
+            '
+            ' The block is closed by NOTES_END. There is no BEGIN BULK in this
+            ' file - it is an INCLUDE - so without that line the notes run
+            ' straight into the bulk data and the first Femap "$" label reads
+            ' back as a note.
             '
             ' hdr() is still read from Femap's output, but only to strip the
             ' banner out of files written by an older build. See ExistingNotes.
@@ -543,6 +559,11 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
                         Next ci
             End If
 
+
+            ' Close the notes block. Written unconditionally, even with no notes
+            ' at all, so the file always has the same shape and the reader never
+            ' has to guess where the notes stopped.
+            writeNew.WriteLine NOTES_END
 
             ' The notes themselves are echoed above, newest first and marked
             ' "+" - that is where they are meant to be READ. Carrying notes
@@ -816,7 +837,7 @@ Function ExistingNotes(fso As Object, path As String, hdr() As String, nHdr As L
             Dim cut As Long
             Dim isBanner As Boolean
             Dim out As String
-            Dim nKept As Long, nDropped As Long
+            Dim nKept As Long, nDropped As Long, nFemap As Long
 
             ReDim raw(255)
             nRaw = 0
@@ -826,11 +847,15 @@ Function ExistingNotes(fso As Object, path As String, hdr() As String, nHdr As L
             out = ""
             nKept = 0
             nDropped = 0
+            nFemap = 0
 
             Set rd = fso.OpenTextFile(path, 1)
             Do While Not rd.AtEndOfStream
                         ln = rd.ReadLine
                         If Left(LTrim(ln), 1) <> "$" Then Exit Do
+                        ' The notes end here. Everything below is bulk data, even
+                        ' though it is still comment lines.
+                        If Left(ln, Len(NOTES_END)) = NOTES_END Then Exit Do
                         If nRaw > UBound(raw) Then ReDim Preserve raw(nRaw * 2)
                         raw(nRaw) = ln
                         If cut < 0 Then
@@ -864,6 +889,14 @@ Function ExistingNotes(fso As Object, path As String, hdr() As String, nHdr As L
                                     nDropped = nDropped + 1
                         ElseIf Left(LTrim(ln), 22) = "$ Exported from group:" Then
                                     nDropped = nDropped + 1
+                        ElseIf UCase(Left(LTrim(ln), 8)) = "$ FEMAP " Then
+                                    ' Femap labels every entity it writes - "$ Femap
+                                    ' Property 1 : ...". Those are bulk data text, never
+                                    ' an analyst note, so they are never carried forward.
+                                    ' Belt and braces alongside NOTES_END: this also
+                                    ' cleans up files written before the delimiter
+                                    ' existed, which have one already baked into them.
+                                    nFemap = nFemap + 1
                         ElseIf oldBanner Then
                                     ' Inside a rule-fenced banner left in the file by an
                                     ' earlier build - drop it, and close on the rule line
@@ -900,6 +933,9 @@ Function ExistingNotes(fso As Object, path As String, hdr() As String, nHdr As L
             report = Trim(Str$(nKept)) & " note(s) kept"
             If nDropped > 0 Then
                         report = report & ", " & Trim(Str$(nDropped)) & " old banner line(s) stripped"
+            End If
+            If nFemap > 0 Then
+                        report = report & ", " & Trim(Str$(nFemap)) & " Femap comment(s) not carried"
             End If
 
             ExistingNotes = out
