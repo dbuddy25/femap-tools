@@ -72,13 +72,17 @@ Sub Main
     Do While csEnum.Next()
         csUser = csUser + 1
     Loop
+    ' Entry 0 is the "build one now" option; -1 is its sentinel ID. Entry 1 is
+    ' global rectangular, then every user CSys.
     Dim csIDs() As Long, csNames() As String
-    ReDim csIDs(csUser)
-    ReDim csNames(csUser)
-    csIDs(0) = 0
-    csNames(0) = "0 - Global Rectangular"
+    ReDim csIDs(csUser + 1)
+    ReDim csNames(csUser + 1)
+    csIDs(0) = -1
+    csNames(0) = "(create new from axial vector)"
+    csIDs(1) = 0
+    csNames(1) = "0 - Global Rectangular"
     Dim cj As Long
-    cj = 1
+    cj = 2
     csEnum.Reset
     Do While csEnum.Next()
         csIDs(cj) = csEnum.ID
@@ -188,6 +192,76 @@ Sub Main
     If grp1ID = grp2ID Then
         App.feAppMessage(FCM_ERROR, "Group 1 and Group 2 must be different groups")
         Exit Sub
+    End If
+
+    ' ============================================================
+    ' Section 2b: Optional new orientation CSys from an axial vector
+    '
+    ' Only the AXIAL direction is picked. CSys.Axis derives the perpendicular
+    ' automatically from the nearest orthogonal global axis, which is fine while
+    ' the PBUSH has K2 = K3 - the two shear directions are interchangeable, so
+    ' where they land does not matter. If a PBUSH with K2 <> K3 is ever used
+    ' here, this becomes wrong and the CSys wants TwoAxes with a second picked
+    ' vector instead.
+    '
+    ' The CSys itself is built later (Section 4b), once matching has found a
+    ' fastener location to sit its origin on.
+    ' ============================================================
+    Dim makeCSys As Boolean
+    Dim axialDir As Long
+    Dim axDx As Double, axDy As Double, axDz As Double
+    Dim csysName As String
+    makeCSys = (csysID = -1)
+    axialDir = 2
+    axDx = 0.0 : axDy = 0.0 : axDz = 1.0
+    csysName = ""
+
+    If makeCSys Then
+        Begin Dialog AxisDlg 300, 180, "New Orientation CSys"
+            Text     12, 10, 276, 24, "Which axis of the new coordinate system is the fastener AXIAL direction?"
+            GroupBox 12, 38, 276, 76, "Axial axis"
+            OptionGroup .axPick
+                OptionButton 22, 56, 250, 12, "X axis"
+                OptionButton 22, 74, 250, 12, "Y axis"
+                OptionButton 22, 92, 250, 12, "Z axis"
+            Text     12, 120, 276, 12, "Next you will pick the vector for that axis."
+            OKButton     56, 146, 80, 20
+            CancelButton 156, 146, 80, 20
+        End Dialog
+
+        Dim adlg As AxisDlg
+        adlg.axPick = 2
+        If Dialog(adlg) <> -1 Then
+            App.feAppMessage(FCM_WARNING, "Cancelled - exiting")
+            Exit Sub
+        End If
+        axialDir = adlg.axPick
+
+        ' feVectorPick( dlgTitle, unitVector, vecLength, vecBase, vecDir )
+        ' vecDir always comes back as a unit vector.
+        Dim vecLen As Double
+        Dim vBase As Variant, vDir As Variant
+        rc = App.feVectorPick("Pick the fastener AXIAL direction", True, vecLen, vBase, vDir)
+        If rc <> FE_OK Then
+            App.feAppMessage(FCM_WARNING, "Vector pick cancelled - exiting")
+            Exit Sub
+        End If
+        axDx = CDbl(vDir(0))
+        axDy = CDbl(vDir(1))
+        axDz = CDbl(vDir(2))
+
+        If Sqr(axDx * axDx + axDy * axDy + axDz * axDz) <= 0.0 Then
+            App.feAppMessage(FCM_ERROR, "Degenerate axial vector - exiting")
+            Exit Sub
+        End If
+
+        If axialDir = 0 Then
+            csysName = "CBUSH axial X"
+        ElseIf axialDir = 1 Then
+            csysName = "CBUSH axial Y"
+        Else
+            csysName = "CBUSH axial Z"
+        End If
     End If
 
     ' ============================================================
@@ -332,6 +406,51 @@ Sub Main
     If nCand = 0 Then
         App.feAppMessage(FCM_WARNING, "No RBE2 pairs found within tolerance " + sdlg.tolBox)
         Exit Sub
+    End If
+
+    ' ============================================================
+    ' Section 4b: Build the new orientation CSys
+    '
+    ' Deferred to here so the origin can sit on the first matched fastener
+    ' rather than at the global origin - the triad then draws at the joint,
+    ' where it can actually be eyeballed. Only orientation affects a CBUSH
+    ' referencing a CID, so the origin is purely a readability choice.
+    '
+    ' CSys.Axis takes a POINT on the axis, not a direction, hence origin + dir.
+    ' ============================================================
+    If makeCSys Then
+        Dim csNew As femap.CSys
+        Set csNew = App.feCSys
+
+        Dim csOrigin(2) As Double
+        Dim csAxisPt(2) As Double
+        csOrigin(0) = g1x(0)
+        csOrigin(1) = g1y(0)
+        csOrigin(2) = g1z(0)
+        csAxisPt(0) = csOrigin(0) + axDx
+        csAxisPt(1) = csOrigin(1) + axDy
+        csAxisPt(2) = csOrigin(2) + axDz
+
+        Dim vOrigin As Variant, vAxisPt As Variant
+        vOrigin = csOrigin
+        vAxisPt = csAxisPt
+
+        ' 0 = rectangular; axialDir picks which axis the vector defines.
+        rc = csNew.Axis(0, axialDir, vOrigin, vAxisPt)
+        If rc <> FE_OK Then
+            App.feAppMessage(FCM_ERROR, "Could not define the new coordinate system - exiting")
+            Exit Sub
+        End If
+
+        csNew.title = csysName
+        ' IDs 0-2 are the predefined global systems and cannot be written.
+        csysID = csNew.NextEmptyID
+        If csysID <= 2 Then csysID = 3
+        If csNew.Put(csysID) <> FE_OK Then
+            App.feAppMessage(FCM_ERROR, "Could not create the new coordinate system - exiting")
+            Exit Sub
+        End If
+        App.feAppMessage(FCM_NORMAL, "Created CSys " + Trim$(Str$(csysID)) + " - " + csysName)
     End If
 
     ' ============================================================
