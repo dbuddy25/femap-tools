@@ -207,7 +207,7 @@ It used to carry Femap's version, the source model and the export date. That tur
 
 Two changes, belt and braces:
 
-- The notes block is closed by a written delimiter, `$=== end of notes - Femap bulk data below ===`. A note is anything above it. That is the whole rule, and unlike the banner markers that came before, it delimits something the tool itself writes rather than trying to recognise something Femap wrote.
+- The notes block is closed by a written delimiter, `$=== end of notes - bulk data below ===`. A note is anything above it. That is the whole rule, and unlike the banner markers that came before, it delimits something the tool itself writes rather than trying to recognise something Femap wrote.
 - A comment beginning `$ Femap ` is **never** carried over. Femap labels every entity it writes, so those are bulk-data text by definition, never an analyst note. This also cleans up files exported before the delimiter existed, which already have one baked into their header.
 
 Files exported by an older build still contain a banner. It's stripped on the next export by comparing against Femap's output for that run — same Femap, same model, so nearly every line matches character-for-character and only the date moves. Marker scaffolding from those builds is dropped by name. After one re-export none of that applies to the file again, and the Messages line reports what it removed:

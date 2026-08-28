@@ -55,7 +55,12 @@ Const OLD_BANNER_MK2  As String = "$--- Femap banner below is regenerated"
 ' nothing between them. Reading the leading "$" run back therefore swallowed the
 ' first bulk comment as a note, and carried it forward on every re-export.
 ' A note is now anything ABOVE this line, which needs no pattern matching.
-Const NOTES_END As String = "$=== end of notes - Femap bulk data below ==="
+Const NOTES_END As String = "$=== end of notes - bulk data below ==="
+
+' The wording above changed on 2026-08-28. Files exported before that carry the
+' previous line, and it has to stay recognised: it starts with "$", so a reader
+' that did not know it would take it for a note and carry it forward forever.
+Const OLD_NOTES_END2 As String = "$=== end of notes - Femap bulk data below ==="
 
 Sub Main
 
@@ -938,6 +943,7 @@ Function ExistingNotes(fso As Object, path As String, hdr() As String, nHdr As L
                         ' The notes end here. Everything below is bulk data, even
                         ' though it is still comment lines.
                         If Left(ln, Len(NOTES_END)) = NOTES_END Then Exit Do
+                        If Left(ln, Len(OLD_NOTES_END2)) = OLD_NOTES_END2 Then Exit Do
                         If nRaw > UBound(raw) Then ReDim Preserve raw(nRaw * 2)
                         raw(nRaw) = ln
                         If cut < 0 Then
