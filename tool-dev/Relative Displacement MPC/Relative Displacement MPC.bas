@@ -112,19 +112,48 @@ Sub Main
         si = si + 1
     Loop
 
-    Begin Dialog OptDlg 400, 268, "Relative Displacement MPC"
-        GroupBox 12, 8, 376, 80, "Directions to measure"
-        CheckBox 24, 26, 352, 14, "T1  - first axis of the shared output CSys", .chkT1
-        CheckBox 24, 46, 352, 14, "T2  - second axis", .chkT2
-        CheckBox 24, 66, 352, 14, "T3  - third axis", .chkT3
-        Text     12, 100, 124, 12, "Equations go in:"
-        DropListBox 140, 98, 248, 120, setNames(), .setPick
-        Text     12, 126, 376, 12, "Sign convention: the new node reads node A MINUS node B."
-        CheckBox 12, 148, 376, 14, "Show orientation arrows at both nodes before creating", .chkArrows
-        CheckBox 12, 168, 376, 14, "Report only - change nothing", .chkDry
-        Text     12, 192, 376, 12, "The new node's rotations are left to PARAM,AUTOSPC."
-        OKButton     104, 226, 90, 24
-        CancelButton 214, 226, 90, 24
+    ' --- coordinate systems for the tracking node ---
+    ' Entry 0 is the sentinel that follows the picked nodes; entry 1 is global
+    ' rectangular; then every user CSys.
+    Dim csEnum As Object
+    Set csEnum = App.feCSys
+    Dim csUser As Long
+    csUser = 0
+    csEnum.Reset
+    Do While csEnum.Next()
+        csUser = csUser + 1
+    Loop
+
+    Dim csIDs() As Long, csNames() As String
+    ReDim csIDs(csUser + 1)
+    ReDim csNames(csUser + 1)
+    csIDs(0) = -1
+    csNames(0) = "(same as the picked nodes)"
+    csIDs(1) = 0
+    csNames(1) = "0 - Global Rectangular"
+    Dim cj As Long
+    cj = 2
+    csEnum.Reset
+    Do While csEnum.Next()
+        csIDs(cj) = csEnum.ID
+        csNames(cj) = Trim$(Str$(csEnum.ID)) + " - " + csEnum.title
+        cj = cj + 1
+    Loop
+
+    Begin Dialog OptDlg 400, 232, "Relative Displacement MPC"
+        GroupBox 12, 8, 376, 46, "Directions to measure"
+        CheckBox  28, 28, 56, 14, "T1", .chkT1
+        CheckBox 100, 28, 56, 14, "T2", .chkT2
+        CheckBox 172, 28, 56, 14, "T3", .chkT3
+        Text     12, 70, 176, 12, "MPC equations go in:"
+        DropListBox 192, 68, 196, 120, setNames(), .setPick
+        Text     12, 96, 176, 12, "Tracking node output CSys:"
+        DropListBox 192, 94, 196, 120, csNames(), .csPick
+        CheckBox 12, 124, 376, 14, "Show orientation arrows at both nodes before creating", .chkArrows
+        CheckBox 12, 144, 376, 14, "Report only - change nothing", .chkDry
+        Text     12, 168, 376, 12, "Cancel the node A pick to finish."
+        OKButton     104, 192, 90, 24
+        CancelButton 214, 192, 90, 24
     End Dialog
 
     Dim dlg As OptDlg
@@ -132,6 +161,7 @@ Sub Main
     dlg.chkT2 = 1
     dlg.chkT3 = 1
     dlg.setPick = 0
+    dlg.csPick = 0
     dlg.chkArrows = 1
     dlg.chkDry = 0
     If Dialog(dlg) <> -1 Then
@@ -166,6 +196,11 @@ Sub Main
     Dim showArrows As Boolean, dryRun As Boolean
     showArrows = (dlg.chkArrows <> 0)
     dryRun = (dlg.chkDry <> 0)
+
+    ' -1 = follow the picked nodes. Anything else is an explicit override, and
+    ' see the warning in Section 2 for what that does and does not do.
+    Dim wantOutCS As Long
+    wantOutCS = csIDs(dlg.csPick)
 
     ' The constraint set is resolved but NOT created here - a new set is made
     ' lazily on the first pair that actually writes, so cancelling out of every
@@ -203,14 +238,17 @@ Sub Main
     ReDim recCS(MAXPAIRS - 1)
 
     Dim nPairs As Long, nSkipped As Long, nEqn As Long, nFail As Long
-    Dim nCoincident As Long
-    nPairs = 0 : nSkipped = 0 : nEqn = 0 : nFail = 0 : nCoincident = 0
+    Dim nCoincident As Long, nMismatch As Long
+    nPairs = 0 : nSkipped = 0 : nEqn = 0 : nFail = 0
+    nCoincident = 0 : nMismatch = 0
 
     Dim aID As Long, bID As Long, mID As Long
     Dim aX As Double, aY As Double, aZ As Double
     Dim bX As Double, bY As Double, bZ As Double
     Dim aOut As Long, bOut As Long
     Dim csType As Long, csName As String
+    Dim mOut As Long
+    Dim csMismatch As Boolean
     Dim sep As Double
     Dim eqID As Long
     Dim arrowsOK As Boolean
@@ -223,19 +261,19 @@ Sub Main
     Dim vN As Variant, vD As Variant, vC As Variant
 
     Dim cLine1 As String, cLine2 As String, cLine3 As String
-    Dim cLine4 As String, cLine5 As String
+    Dim cLine4 As String, cLine5 As String, cLine6 As String
 
     Do
         ' --- pick A, then B ---
         ' SelectID loads the node straight into the object, so every value is
         ' read out immediately: any later call on the same object overwrites it.
-        rc = ndA.SelectID("Pick node A - measured FROM  (Cancel to finish)")
+        rc = ndA.SelectID("Pick node A (measured FROM)")
         If rc <> FE_OK Then Exit Do
         aID = ndA.ID
         aX = ndA.x : aY = ndA.y : aZ = ndA.z
         aOut = ndA.outCSys
 
-        rc = ndB.SelectID("Pick node B - measured TO")
+        rc = ndB.SelectID("Pick node B (measured TO)")
         If rc <> FE_OK Then
             App.feAppMessage(FCM_WARNING, "Node B pick cancelled - pair skipped")
             nSkipped = nSkipped + 1
@@ -297,6 +335,30 @@ Sub Main
 
         sep = Sqr((aX - bX) * (aX - bX) + (aY - bY) * (aY - bY) + (aZ - bZ) * (aZ - bZ))
 
+        ' --- output CSys for the tracking node ---
+        ' *** AN OVERRIDE RELABELS THE ANSWER, IT DOES NOT ROTATE IT ***
+        ' The MPC equates DOF NUMBERS: u_M(T1) = u_A(T1) - u_B(T1). Those A and B
+        ' terms are resolved in THEIR output system. Giving the tracking node a
+        ' different one does not transform anything - the value it reports is
+        ' still the relative displacement along the PICKED nodes' first axis,
+        ' while the node now calls that direction by another system's name.
+        ' Useful when the two systems are parallel and you just want the label
+        ' to match a report CSys. Wrong, and silently so, when they are not.
+        If wantOutCS = -1 Then
+            mOut = aOut
+            csMismatch = False
+        Else
+            mOut = wantOutCS
+            csMismatch = (mOut <> aOut)
+        End If
+
+        If csMismatch Then
+            App.feAppMessage(FCM_WARNING, "  Tracking node CSys " + Trim$(Str$(mOut)) _
+                + " differs from the picked nodes' CSys " + Trim$(Str$(aOut)))
+            App.feAppMessage(FCM_WARNING, "  The VALUE stays along CSys " + Trim$(Str$(aOut)) _
+                + " axes - only the axis labels change.")
+        End If
+
         ' --- confirm ---
         If arrowsOK Then
             If ShowTriads(App, GFX_SET, aOut, aX, aY, aZ, bX, bY, bZ) <> FE_OK Then
@@ -311,20 +373,27 @@ Sub Main
         cLine3 = "Output CSys:  " + csName + "   (rectangular)"
         cLine4 = "Measuring:  " + dofStr + "     as  A minus B"
         If arrowsOK Then
-            cLine5 = "Arrows at both nodes:  red = first axis, green = second, blue = third."
+            cLine5 = "Arrows:  red = axis 1,  green = axis 2,  blue = axis 3"
         Else
             cLine5 = "Separation:  " + Format$(sep, "0.####")
         End If
+        If csMismatch Then
+            cLine6 = "Tracking node CSys " + Trim$(Str$(mOut)) + " - LABELS ONLY, value is CSys " _
+                + Trim$(Str$(aOut))
+        Else
+            cLine6 = "Tracking node CSys:  " + Trim$(Str$(mOut))
+        End If
 
-        Begin Dialog ConfirmDlg 400, 190, "Relative Displacement MPC - Confirm"
-            Text 12, 10, 376, 12, cLine1
-            Text 12, 28, 376, 12, cLine2
-            Text 12, 46, 376, 12, cLine3
-            Text 12, 64, 376, 12, cLine4
-            Text 12, 82, 376, 12, cLine5
-            Text 12, 108, 376, 12, "OK creates one node and one equation per direction."
-            OKButton     104, 148, 90, 24
-            CancelButton 214, 148, 90, 24
+        Begin Dialog ConfirmDlg 420, 208, "Relative Displacement MPC - Confirm"
+            Text 12, 10, 396, 12, cLine1
+            Text 12, 28, 396, 12, cLine2
+            Text 12, 46, 396, 12, cLine3
+            Text 12, 64, 396, 12, cLine4
+            Text 12, 82, 396, 12, cLine6
+            Text 12, 100, 396, 12, cLine5
+            Text 12, 126, 396, 12, "OK creates one node and one equation per direction."
+            OKButton     114, 166, 90, 24
+            CancelButton 224, 166, 90, 24
         End Dialog
 
         Dim cdlg As ConfirmDlg
@@ -384,9 +453,10 @@ Sub Main
         ndM.z = 0.5 * (aZ + bZ)
         ndM.type = 0
         ndM.defCSys = 0
-        ' The one property that makes the equation mean what it says: the
-        ' measurement node must report in the SAME system as A and B.
-        ndM.outCSys = aOut
+        ' Normally the same system as A and B, which is what makes T1/T2/T3
+        ' read as the relative X/Y/Z. An override only renames the axes - see
+        ' the warning above.
+        ndM.outCSys = mOut
         ndM.layer = ndA.layer
         If ndM.Put(mID) <> FE_OK Then
             App.feAppMessage(FCM_ERROR, "Could not create the measurement node for pair " _
@@ -396,6 +466,7 @@ Sub Main
         End If
 
         If sep <= 0.0 Then nCoincident = nCoincident + 1
+        If csMismatch Then nMismatch = nMismatch + 1
 
         ' --- one equation per requested direction ---
         Dim madeHere As Long
@@ -501,6 +572,12 @@ NextPair:
         App.feAppMessage(FCM_WARNING, "  The measurement nodes' rotations - and any")
         App.feAppMessage(FCM_WARNING, "  translation you did not instrument - are")
         App.feAppMessage(FCM_WARNING, "  singular. PARAM,AUTOSPC must be ON.")
+
+        If nMismatch > 0 Then
+            App.feAppMessage(FCM_WARNING, "  Relabelled CSys:       " + Trim$(Str$(nMismatch)))
+            App.feAppMessage(FCM_WARNING, "  Those nodes report along their PICKED nodes'")
+            App.feAppMessage(FCM_WARNING, "  axes, not the axes their own CSys names.")
+        End If
 
         If nCoincident > 0 Then
             App.feAppMessage(FCM_WARNING, "  Coincident pairs:      " + Trim$(Str$(nCoincident)))

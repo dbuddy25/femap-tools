@@ -27,8 +27,9 @@ answered across a lot of load cases.
 ## How it works
 
 1. One options dialog, asked once: which translations to measure (T1/T2/T3), which constraint
-   set the equations go in (existing, or a new one created for you), whether to show the
-   confirm arrows, and a report-only mode.
+   set the MPC equations go in (existing, or a new one created for you), the tracking node's
+   output CSys (defaults to following the picked nodes), whether to show the confirm arrows,
+   and a report-only mode.
 2. Pick node **A** (measured *from*) and node **B**. Cancel at A to finish.
 3. The pair is gated — see below. A pair that fails the gate is reported and skipped; the loop
    keeps going.
@@ -61,7 +62,16 @@ Otherwise it subtracts motion along one direction from motion along a different 
 returns a number that means nothing.
 
 So the tool gates: **A and B must share an output CSys, and it must be rectangular.** The
-measurement node is then created with that same `outCSys`, so all three agree.
+measurement node is created with that same `outCSys` by default, so all three agree.
+
+**Overriding the tracking node's output CSys relabels the answer — it does not rotate it.**
+The MPC equates DOF *numbers*: `u_M(T1) = u_A(T1) - u_B(T1)`, and those A and B terms resolve
+in *their* output system. Giving the tracking node a different one transforms nothing: the
+value it reports is still the relative displacement along the picked nodes' first axis, while
+the node now calls that direction by another system's name. That is useful when the two
+systems are parallel and you only want the label to match a reporting CSys, and silently wrong
+when they are not — so every pair that overrides is warned about in the confirm dialog and
+counted in the summary.
 
 Cylindrical and spherical systems are refused rather than handled. Their directions depend on
 position — the radial direction at A does not point the same way as the radial direction at B
@@ -119,6 +129,9 @@ Messages window and is gone when that scrolls.
 - **The dependent-term order has not been confirmed on a real export yet.** Until it is, treat
   results as provisional.
 - Rotational relative DOFs (R1–R3) are out of scope.
+- Node A and node B are picked in two separate prompts, not one. A single multi-pick returns a
+  Set ordered by node ID rather than by pick order, which would lose which node was A — and
+  A-minus-B is the entire sign convention.
 - Rectangular output CSys only. Cylindrical and spherical are gated out, not handled.
 - The measurement node sits at the midpoint of A and B and could land on an existing node. If A
   and B are themselves coincident it lands exactly on both — the summary counts and flags those
