@@ -124,6 +124,28 @@ report-only run or a run where every confirm is cancelled leaves no empty set be
 `RelDisp <A>-<B>` the mapping from measurement node to the pair it measures exists only in the
 Messages window and is gone when that scrolls.
 
+## The equations existing is not the same as the deck containing them
+
+An analysis case selects constraint equations through **its own slot** —
+`AnalysisCase.BCSet[1]` — which is *separate* from `BCSet[0]`, the one that selects
+constraints. If that slot names a different constraint set from the one the equations went
+into, Femap writes **no MPC cards at all**: no warning, no empty section, just a deck that
+quietly lacks them. Toggling constraint-equation output in the analysis set does not help,
+because the slot, not the toggle, decides which set is written.
+
+So before exporting: **Analysis Set Manager → Boundary Conditions → Constraint Equations →
+select the set the tool reported.** The summary prints the set ID and this reminder on every
+run that writes anything.
+
+The set dropdown therefore defaults to the **active constraint set**, not to "create new" — a
+brand-new set is the choice most likely to produce a deck with no MPCs in it, since a set that
+did not exist when the analysis case was built cannot already be named in its slot.
+
+A second, independent filter applies to group exports: `NasBulkGroupID` limits the deck to
+*the entities in that group*, so an equation referencing a tracking node outside the exported
+group will not be written either. If you export by group, add the `RelDisp` nodes to the group
+being exported.
+
 ## Known gaps
 
 - **The dependent-term order has not been confirmed on a real export yet.** Until it is, treat

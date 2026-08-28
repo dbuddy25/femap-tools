@@ -140,6 +140,22 @@ Sub Main
         cj = cj + 1
     Loop
 
+    ' Default the dropdown to the ACTIVE constraint set rather than to the
+    ' create-new sentinel. A brand new set is the option most likely to produce
+    ' a deck with no MPC cards in it: the analysis case selects constraint
+    ' equations through its OWN slot (AnalysisCase.BCSet[1]), separately from
+    ' constraints in BCSet[0], and a set that did not exist when the case was
+    ' set up is not in that slot. See the summary note at the end.
+    Dim activeBC As Long
+    activeBC = App.Info_ActiveID(FT_BC_DIR)
+    Dim defPick As Long
+    defPick = 0
+    If activeBC > 0 Then
+        For i = 1 To bsCount
+            If setIDs(i) = activeBC Then defPick = i
+        Next i
+    End If
+
     Begin Dialog OptDlg 400, 232, "Relative Displacement MPC"
         GroupBox 12, 8, 376, 46, "Directions to measure"
         CheckBox  28, 28, 56, 14, "T1", .chkT1
@@ -160,7 +176,7 @@ Sub Main
     dlg.chkT1 = 1
     dlg.chkT2 = 1
     dlg.chkT3 = 1
-    dlg.setPick = 0
+    dlg.setPick = defPick
     dlg.csPick = 0
     dlg.chkArrows = 1
     dlg.chkDry = 0
@@ -566,6 +582,17 @@ NextPair:
         App.feAppMessage(FCM_HIGHLIGHT, "  ----------------------------------------")
         App.feAppMessage(FCM_NORMAL,  "  Each is grouped as RelDisp <A>-<B>.")
         App.feAppMessage(FCM_NORMAL,  "  Sign convention: node A MINUS node B.")
+
+        ' The equations existing is not the same as the deck containing them.
+        ' An analysis case picks constraint equations through its own slot,
+        ' separate from the one that picks constraints, and a set it does not
+        ' name is silently absent from the export - no warning, no empty
+        ' section, just no MPC cards.
+        App.feAppMessage(FCM_WARNING, "  BEFORE EXPORTING: in the Analysis Set")
+        App.feAppMessage(FCM_WARNING, "  Manager, set Constraint Equations to set " _
+            + Trim$(Str$(bcSetID)) + ".")
+        App.feAppMessage(FCM_WARNING, "  It is a SEPARATE slot from Constraints - if it")
+        App.feAppMessage(FCM_WARNING, "  names another set, the deck gets no MPC cards.")
 
         ' Not optional. A copy of this tool handed to somebody else must not let
         ' their deck fail on a singularity nobody can explain.
