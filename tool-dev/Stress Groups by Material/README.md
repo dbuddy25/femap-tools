@@ -87,8 +87,19 @@ layers. That single call is the whole knob.
 | Group name | `Stress` | **Combined mode only.** Per-material groups are named for their material, with nothing added. |
 | Combine into one group | off | Union of all selected materials into a single named group |
 | Exclude elements attached to rigids | on | The exclusion above. Off leaves the artefact elements in. |
-| Consider midside nodes | on | `bParabolicEdges` — matters on parabolic (tet10 / brick20) meshes. |
 | Also make an all-elements group | off | A second unfiltered group per material, suffixed `- All`, for display |
+
+### Two `feElementFreeFace` flags are hardcoded, deliberately
+
+Both are fixed rather than exposed, because one of them only ever does the wrong thing and the
+other essentially never does anything.
+
+**`bParabolicEdges` = `True`.** It decides only whether face matching compares midside nodes as
+well as corners. On a linear mesh it is inert. On a parabolic mesh the two settings agree unless
+a seam has merged corner nodes but *separate* midside nodes — which normal meshing and normal
+node merging do not produce. `True` is the safe end of a choice that almost never matters: it
+treats an unmerged seam as the free surface it is, instead of quietly folding those solids away
+as interior.
 
 ### Plates sitting on solid faces: both are kept
 

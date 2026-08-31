@@ -98,25 +98,23 @@ Sub Main
     ' proportional - a label that fits in the editor can still clip at runtime.
     ' Every control is given far more width and height than its text needs.
     ' If a label is ever lengthened, widen the dialog with it.
-    Begin Dialog StressGrpDlg 520, 266, "Stress Groups by Material"
+    Begin Dialog StressGrpDlg 520, 244, "Stress Groups by Material"
         Text        14,  12, 480, 16, "Group name for the combined group:"
         TextBox     14,  32, 480, 20, .prefixBox
         Text        14,  60, 480, 16, "Only used when combining. One group per material is"
         Text        14,  78, 480, 16, "named for its material, with nothing added."
         CheckBox    14, 106, 480, 18, "Combine ALL selected materials into ONE group", .chkCombine
         CheckBox    14, 136, 480, 18, "Exclude elements attached to rigid elements", .chkRigid
-        CheckBox    14, 158, 480, 18, "Consider midside nodes when finding free faces", .chkParabolic
-        CheckBox    14, 188, 480, 18, "ALSO make an all-elements group, for display", .chkAll
-        Text        30, 208, 470, 16, "Everything of that material, unfiltered, suffixed - All"
-        OKButton   150, 230, 90, 24
-        CancelButton 260, 230, 90, 24
+        CheckBox    14, 166, 480, 18, "ALSO make an all-elements group, for display", .chkAll
+        Text        30, 186, 470, 16, "Everything of that material, unfiltered, suffixed - All"
+        OKButton   150, 208, 90, 24
+        CancelButton 260, 208, 90, 24
     End Dialog
 
     Dim dlg As StressGrpDlg
     dlg.prefixBox = "Stress"
     dlg.chkCombine = 0
     dlg.chkRigid = 1
-    dlg.chkParabolic = 1
     dlg.chkAll = 0
     If Dialog(dlg) <> -1 Then
         App.feAppMessage(FCM_WARNING, "Cancelled - exiting")
@@ -126,12 +124,11 @@ Sub Main
     prefix = Trim$(dlg.prefixBox)
     If prefix = "" Then prefix = "Stress"
 
-    Dim bRigid As Boolean, bParab As Boolean
+    Dim bRigid As Boolean
     Dim bCombine As Boolean, bAll As Boolean
     bCombine = (dlg.chkCombine = 1)
     bAll = (dlg.chkAll = 1)
     bRigid = (dlg.chkRigid = 1)
-    bParab = (dlg.chkParabolic = 1)
 
     App.feAppMessage(FCM_NORMAL, "==================================================")
     App.feAppMessage(FCM_NORMAL, "STRESS GROUPS BY MATERIAL")
@@ -186,7 +183,15 @@ Sub Main
         ' the solid too, because only solid-to-solid sharing then decides
         ' freeness and an exterior face with a plate on it has no solid behind
         ' it. Setting this True would silently delete the covered solids.
-        rc = App.feElementFreeFace(allSolid.ID, bParab, False, nFree, vFreeData)
+        ' bParabolicEdges is hardcoded True and is not an option either. It only
+        ' decides whether face matching compares midside nodes as well as
+        ' corners, so it is inert on a linear mesh, and on a parabolic mesh the
+        ' two settings agree unless a seam has merged corner nodes but separate
+        ' midside nodes - which normal meshing and normal node merging do not
+        ' produce. True is the safe end of a choice that almost never matters:
+        ' it treats an unmerged seam as the free surface it is, rather than
+        ' quietly folding those solids away as interior.
+        rc = App.feElementFreeFace(allSolid.ID, True, False, nFree, vFreeData)
         If rc <> FE_OK Then
             App.feAppMessage(FCM_ERROR, "feElementFreeFace failed, rc=" & Str$(rc))
             Exit Sub
