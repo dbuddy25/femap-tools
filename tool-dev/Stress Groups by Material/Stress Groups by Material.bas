@@ -1,10 +1,14 @@
 ' Stress Groups by Material.bas
 ' -----------------------------------------------------------------------------
-' Builds one group per material holding the elements whose stress is worth
-' reporting - and, just as importantly, leaving out the elements whose stress is
-' an artefact.
+' Builds groups holding the elements whose stress is worth reporting - and, just
+' as importantly, leaving out the elements whose stress is an artefact.
 '
-' For each material you select, the group is assembled as:
+' TWO MODES, set by a checkbox:
+'   ONE GROUP PER MATERIAL  named "<prefix> - <material title>"
+'   ONE COMBINED GROUP      the union of every selected material, named exactly
+'                           what you type. Pick three materials, get one group.
+'
+' Either way the contents are assembled per material as:
 '
 '   + ALL plate elements of that material          (plate, laminate, membrane)
 '   + ALL beam elements of that material           (beam, bar, rod)
@@ -79,18 +83,22 @@ Sub Main
     ' ============================================================
     ' Section 2: Options
     ' ============================================================
-    Begin Dialog StressGrpDlg 320, 150, "Stress Groups by Material"
-        Text        10,  10, 300, 12, "Group name prefix (material title is appended):"
-        TextBox     10,  24, 300, 14, .prefixBox
-        CheckBox    10,  50, 300, 12, "Exclude elements attached to rigid elements", .chkRigid
-        CheckBox    10,  68, 300, 12, "Plate elements cover a solid face (face is NOT free)", .chkPlaneElem
-        CheckBox    10,  86, 300, 12, "Consider midside nodes when finding free faces", .chkParabolic
-        OKButton    70, 120, 80, 20
-        CancelButton 170, 120, 80, 20
+    Begin Dialog StressGrpDlg 320, 186, "Stress Groups by Material"
+        Text        10,   8, 300, 12, "Group name:"
+        TextBox     10,  22, 300, 14, .prefixBox
+        Text        10,  40, 300, 10, "Per material: the material title is appended to this."
+        Text        10,  51, 300, 10, "Combined: this name is used verbatim."
+        CheckBox    10,  66, 300, 12, "Combine ALL selected materials into ONE group", .chkCombine
+        CheckBox    10,  90, 300, 12, "Exclude elements attached to rigid elements", .chkRigid
+        CheckBox    10, 108, 300, 12, "Plate elements cover a solid face (face is NOT free)", .chkPlaneElem
+        CheckBox    10, 126, 300, 12, "Consider midside nodes when finding free faces", .chkParabolic
+        OKButton    70, 156, 80, 20
+        CancelButton 170, 156, 80, 20
     End Dialog
 
     Dim dlg As StressGrpDlg
     dlg.prefixBox = "Stress"
+    dlg.chkCombine = 0
     dlg.chkRigid = 1
     dlg.chkPlaneElem = 0
     dlg.chkParabolic = 1
@@ -102,7 +110,8 @@ Sub Main
     prefix = Trim$(dlg.prefixBox)
     If prefix = "" Then prefix = "Stress"
 
-    Dim bRigid As Boolean, bPlane As Boolean, bParab As Boolean
+    Dim bRigid As Boolean, bPlane As Boolean, bParab As Boolean, bCombine As Boolean
+    bCombine = (dlg.chkCombine = 1)
     bRigid = (dlg.chkRigid = 1)
     bPlane = (dlg.chkPlaneElem = 1)
     bParab = (dlg.chkParabolic = 1)
@@ -200,7 +209,7 @@ Sub Main
     End If
 
     ' ============================================================
-    ' Section 5: One group per material
+    ' Section 5: Walk the materials
     ' ============================================================
     Dim mt As femap.Matl
     Set mt = App.feMatl
@@ -213,8 +222,16 @@ Sub Main
     Set keepSet = App.feSet
     Dim workSet As femap.Set
     Set workSet = App.feSet
+    Dim combinedSet As femap.Set
+    Set combinedSet = App.feSet
 
     nMade = 0
+
+    If bCombine Then
+        App.feAppMessage(FCM_NORMAL, "")
+        App.feAppMessage(FCM_NORMAL, "COMBINING " & Str$(mtSet.Count) & _
+            " material(s) into one group.")
+    End If
 
     matID = mtSet.First()
     Do While matID > 0
@@ -264,19 +281,33 @@ Sub Main
             nSolidAll = workSet.Count
 
             ' ---- the rigid exclusion ----
-            nBefore = keepSet.Count
-            If bRigid And rigidBand.Count > 0 Then
-                keepSet.RemoveSet(rigidBand.ID)
+            ' In combined mode the exclusion is applied once to the union after
+            ' the loop instead. Removing an element is idempotent, so per
+            ' material and once at the end give the same answer - but doing it
+            ' at the end means the per-material counts printed here are the
+            ' pre-exclusion contributions, which is what makes them add up.
+            nRemoved = 0
+            If Not bCombine Then
+                nBefore = keepSet.Count
+                If bRigid And rigidBand.Count > 0 Then
+                    keepSet.RemoveSet(rigidBand.ID)
+                End If
+                nRemoved = nBefore - keepSet.Count
             End If
-            nRemoved = nBefore - keepSet.Count
 
             App.feAppMessage(FCM_NORMAL, "  plates            : " & Str$(nPlate))
             App.feAppMessage(FCM_NORMAL, "  beams             : " & Str$(nBeam))
             App.feAppMessage(FCM_NORMAL, "  free-face solids  : " & Str$(nSolid) & _
                 "   (of " & Str$(nSolidAll) & " solids in this material)")
-            App.feAppMessage(FCM_NORMAL, "  removed at rigids : " & Str$(nRemoved))
+            If Not bCombine Then
+                App.feAppMessage(FCM_NORMAL, "  removed at rigids : " & Str$(nRemoved))
+            End If
 
-            If keepSet.Count = 0 Then
+            If bCombine Then
+                combinedSet.AddSet(keepSet.ID)
+                App.feAppMessage(FCM_NORMAL, "  contributes       : " & Str$(keepSet.Count) & _
+                    "   (running union " & Str$(combinedSet.Count) & ")")
+            ElseIf keepSet.Count = 0 Then
                 App.feAppMessage(FCM_WARNING, "  nothing left to report on - no group created")
             Else
                 ' ---- create the group ----
@@ -301,6 +332,43 @@ Sub Main
 
         matID = mtSet.Next()
     Loop
+
+    ' ============================================================
+    ' Section 6: The combined group, if that is what was asked for
+    ' ============================================================
+    ' The rigid exclusion is applied ONCE here rather than per material. An
+    ' element attached to a rigid has to come out regardless of which material
+    ' contributed it, and a material boundary is not a reason to keep it.
+    If bCombine Then
+        nBefore = combinedSet.Count
+        If bRigid And rigidBand.Count > 0 Then
+            combinedSet.RemoveSet(rigidBand.ID)
+        End If
+        nRemoved = nBefore - combinedSet.Count
+
+        App.feAppMessage(FCM_NORMAL, "")
+        App.feAppMessage(FCM_NORMAL, "COMBINED")
+        App.feAppMessage(FCM_NORMAL, "  union of all materials : " & Str$(nBefore))
+        App.feAppMessage(FCM_NORMAL, "  removed at rigids      : " & Str$(nRemoved))
+
+        If combinedSet.Count = 0 Then
+            App.feAppMessage(FCM_WARNING, "  nothing left to report on - no group created")
+        Else
+            gName = prefix
+            gid = gp.NextEmptyID
+            gp.title = gName
+            gp.SetAdd(FT_ELEM, combinedSet.ID)
+            rc = gp.Put(gid)
+            If rc <> FE_OK Then
+                App.feAppMessage(FCM_ERROR, "  group Put failed, rc=" & Str$(rc))
+            Else
+                App.feGroupEvaluate(-gid, True)
+                App.feAppMessage(FCM_NORMAL, "  GROUP " & Str$(gid) & " """ & gName & _
+                    """ : " & Str$(combinedSet.Count) & " elements")
+                nMade = nMade + 1
+            End If
+        End If
+    End If
 
     App.feAppMessage(FCM_NORMAL, "")
     App.feAppMessage(FCM_NORMAL, "Done. " & Str$(nMade) & " group(s) created.")

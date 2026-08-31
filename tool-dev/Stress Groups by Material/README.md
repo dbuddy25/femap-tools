@@ -1,11 +1,23 @@
 # Stress Groups by Material
 
-Builds one group per material holding the elements whose stress is worth reporting — and,
-just as importantly, leaving out the elements whose stress is an artefact.
+Builds groups holding the elements whose stress is worth reporting — and, just as
+importantly, leaving out the elements whose stress is an artefact.
 
 *(file: `Stress Groups by Material.bas`)*
 
 **Status:** Built 2026-08-31, untested. Creates groups; changes nothing else in the model.
+
+## Two modes
+
+| Mode | Result | Named |
+|---|---|---|
+| **One group per material** (default) | A group for each material you selected | `<name> - <material title>` |
+| **One combined group** (checkbox) | The union of every selected material — pick three, get one group | exactly the name you type |
+
+In combined mode the rigid exclusion is applied **once to the union** rather than per material.
+Removal is idempotent so the answer is the same either way, but doing it at the end means the
+per-material lines printed along the way are pre-exclusion contributions — which is what makes
+them add up to the union total.
 
 ## The recipe
 
@@ -57,7 +69,8 @@ layers. That single call is the whole knob.
 
 | Option | Default | Effect |
 |---|---|---|
-| Group name prefix | `Stress` | Group is named `<prefix> - <material title>` |
+| Group name | `Stress` | Per-material mode appends the material title; combined mode uses it verbatim |
+| Combine into one group | off | Union of all selected materials into a single named group |
 | Exclude elements attached to rigids | on | The exclusion above. Off leaves the artefact elements in. |
 | Plate elements cover a solid face | off | `bPlaneElem` — a solid face with a plate on it is not free. Turn on if you skin solids with plates. |
 | Consider midside nodes | on | `bParabolicEdges` — matters on parabolic (tet10 / brick20) meshes. |
@@ -69,9 +82,12 @@ the result.
 
 ## Output
 
-Per material, the Messages window reports the plate / beam / free-face-solid counts, how many
-solids that material has in total (so the free-face fraction is visible), how many elements the
-rigid exclusion removed, and the group that was written.
+Per material, the Messages window reports the plate / beam / free-face-solid counts and how many
+solids that material has in total, so the free-face fraction is visible.
+
+In per-material mode each material also reports how many elements the rigid exclusion removed
+and the group that was written. In combined mode each material reports its contribution and the
+running union, then a final block gives the union total, the rigid removal, and the one group.
 
 ## Notes
 
