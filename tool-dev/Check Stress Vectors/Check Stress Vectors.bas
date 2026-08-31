@@ -58,22 +58,33 @@ Sub Main
     ' ============================================================
     ' Section 1: Element inventory by class
     ' ============================================================
-    ' Built with AddRule(FET_L_*, FGD_ELEM_BYTYPE) rather than by walking
-    ' topology codes, so laminates are counted with their non-laminate kin.
+    ' Built with AddRule(FET_*, FGD_ELEM_BYTYPE) rather than by walking topology
+    ' codes, so laminates are counted with their non-laminate kin.
+    '
+    ' *** THE L IN FET_L_* MEANS LINEAR, NOT "ELEMENT TYPE" ***
+    ' Linear and parabolic elements have SEPARATE type codes - FET_L_SOLID is 25
+    ' and FET_P_SOLID is 26. Listing only the L half matches tet4/wedge6/brick8
+    ' and silently misses every tet10, wedge15 and brick20. Both halves, always.
     Dim plateSet As femap.Set
     Set plateSet = App.feSet
     plateSet.AddRule(FET_L_PLATE, FGD_ELEM_BYTYPE)
+    plateSet.AddRule(FET_P_PLATE, FGD_ELEM_BYTYPE)
     plateSet.AddRule(FET_L_LAMINATE_PLATE, FGD_ELEM_BYTYPE)
+    plateSet.AddRule(FET_P_LAMINATE_PLATE, FGD_ELEM_BYTYPE)
     plateSet.AddRule(FET_L_MEMBRANE, FGD_ELEM_BYTYPE)
+    plateSet.AddRule(FET_P_MEMBRANE, FGD_ELEM_BYTYPE)
 
     Dim solidSet As femap.Set
     Set solidSet = App.feSet
     solidSet.AddRule(FET_L_SOLID, FGD_ELEM_BYTYPE)
+    solidSet.AddRule(FET_P_SOLID, FGD_ELEM_BYTYPE)
     solidSet.AddRule(FET_L_LAMINATE_SOLID, FGD_ELEM_BYTYPE)
+    solidSet.AddRule(FET_P_LAMINATE_SOLID, FGD_ELEM_BYTYPE)
 
     Dim lineSet As femap.Set
     Set lineSet = App.feSet
     lineSet.AddRule(FET_L_BEAM, FGD_ELEM_BYTYPE)
+    lineSet.AddRule(FET_P_BEAM, FGD_ELEM_BYTYPE)
     lineSet.AddRule(FET_L_BAR, FGD_ELEM_BYTYPE)
     lineSet.AddRule(FET_L_ROD, FGD_ELEM_BYTYPE)
 

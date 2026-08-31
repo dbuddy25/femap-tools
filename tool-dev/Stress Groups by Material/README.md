@@ -105,6 +105,29 @@ In per-material mode each material also reports how many elements the rigid excl
 and the group that was written. In combined mode each material reports its contribution and the
 running union, then a final block gives the union total, the rigid removal, and the one group.
 
+## The linear/parabolic trap
+
+The `L` in `FET_L_SOLID` means **Linear**, not "element type". Femap gives linear and parabolic
+elements separate type codes:
+
+| Class | Linear | Parabolic |
+|---|---|---|
+| Solid | `FET_L_SOLID` (25) | `FET_P_SOLID` (26) |
+| Plate | `FET_L_PLATE` (17) | `FET_P_PLATE` (18) |
+| Membrane | `FET_L_MEMBRANE` (13) | `FET_P_MEMBRANE` (14) |
+| Laminate plate | `FET_L_LAMINATE_PLATE` (21) | `FET_P_LAMINATE_PLATE` (22) |
+| Laminate solid | `FET_L_LAMINATE_SOLID` | `FET_P_LAMINATE_SOLID` |
+| Beam | `FET_L_BEAM` (5) | `FET_P_BEAM` |
+
+A rule on `FET_L_SOLID` alone matches tet4 / wedge6 / brick8 and **silently misses every tet10,
+wedge15 and brick20** — which is most of a real tet mesh. Every class in this tool lists both
+halves of the pair. If you add an element class, add both.
+
+To make the next version of this visible rather than silent, each material also prints an
+**other/unclassified** count — everything of that material matching none of the three classes.
+Masses, springs and rigids legitimately land there, so a non-zero number is normal; a number
+in the thousands means a whole element family is being missed.
+
 ## Notes
 
 - Group population uses **SetAdd before Put**, then `feGroupEvaluate` — `SetAdd` builds

@@ -74,7 +74,7 @@ Sub Main
     Dim vElems() As Long
     Dim matID As Long, gid As Long, nMade As Long
     Dim nPlate As Long, nSolid As Long, nBeam As Long, nSolidAll As Long
-    Dim nBefore As Long, nRemoved As Long, nRigid As Long
+    Dim nBefore As Long, nRemoved As Long, nRigid As Long, nOther As Long
     Dim lb As Long
 
     ' ============================================================
@@ -137,20 +137,33 @@ Sub Main
     ' ============================================================
     ' Section 3: Model-wide element classes, built ONCE
     ' ============================================================
+    ' *** THE L IN FET_L_* MEANS LINEAR, NOT "ELEMENT TYPE" ***
+    ' Femap gives linear and parabolic elements SEPARATE type codes:
+    ' FET_L_SOLID is 25 (Linear Solid) and FET_P_SOLID is 26 (Parabolic Solid).
+    ' A rule on FET_L_SOLID alone matches tet4/wedge6/brick8 and silently misses
+    ' every tet10, wedge15 and brick20 - which is most of a real tet mesh. Same
+    ' trap on plates (17/18), membranes (13/14), laminates (21/22) and beams.
+    ' Every class below MUST list both halves of the pair.
     Dim allPlate As femap.Set
     Set allPlate = App.feSet
     allPlate.AddRule(FET_L_PLATE, FGD_ELEM_BYTYPE)
+    allPlate.AddRule(FET_P_PLATE, FGD_ELEM_BYTYPE)
     allPlate.AddRule(FET_L_LAMINATE_PLATE, FGD_ELEM_BYTYPE)
+    allPlate.AddRule(FET_P_LAMINATE_PLATE, FGD_ELEM_BYTYPE)
     allPlate.AddRule(FET_L_MEMBRANE, FGD_ELEM_BYTYPE)
+    allPlate.AddRule(FET_P_MEMBRANE, FGD_ELEM_BYTYPE)
 
     Dim allSolid As femap.Set
     Set allSolid = App.feSet
     allSolid.AddRule(FET_L_SOLID, FGD_ELEM_BYTYPE)
+    allSolid.AddRule(FET_P_SOLID, FGD_ELEM_BYTYPE)
     allSolid.AddRule(FET_L_LAMINATE_SOLID, FGD_ELEM_BYTYPE)
+    allSolid.AddRule(FET_P_LAMINATE_SOLID, FGD_ELEM_BYTYPE)
 
     Dim allBeam As femap.Set
     Set allBeam = App.feSet
     allBeam.AddRule(FET_L_BEAM, FGD_ELEM_BYTYPE)
+    allBeam.AddRule(FET_P_BEAM, FGD_ELEM_BYTYPE)
     allBeam.AddRule(FET_L_BAR, FGD_ELEM_BYTYPE)
     allBeam.AddRule(FET_L_ROD, FGD_ELEM_BYTYPE)
 
@@ -314,6 +327,16 @@ Sub Main
             App.feAppMessage(FCM_NORMAL, "  beams             : " & Str$(nBeam))
             App.feAppMessage(FCM_NORMAL, "  free-face solids  : " & Str$(nSolid) & _
                 "   (of " & Str$(nSolidAll) & " solids in this material)")
+
+            ' Anything of this material that matched none of the three classes.
+            ' Masses, springs and rigids legitimately land here - but so would a
+            ' whole element family that the rules above forgot, which is exactly
+            ' how the linear/parabolic bug hid. Printed so it cannot hide again.
+            nOther = matSet.Count - nPlate - nBeam - nSolidAll
+            If nOther > 0 Then
+                App.feAppMessage(FCM_NORMAL, "  other/unclassified: " & Str$(nOther) & _
+                    "   (mass, spring, rigid, gap ... expected non-zero)")
+            End If
             If Not bCombine Then
                 App.feAppMessage(FCM_NORMAL, "  removed at rigids : " & Str$(nRemoved))
             End If
