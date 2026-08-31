@@ -11,7 +11,7 @@ importantly, leaving out the elements whose stress is an artefact.
 
 | Mode | Result | Named |
 |---|---|---|
-| **One group per material** (default) | A group for each material you selected | `<name> - <material title>` |
+| **One group per material** (default) | A group for each material you selected | the material title, with nothing added |
 | **One combined group** (checkbox) | The union of every selected material — pick three, get one group | exactly the name you type |
 
 In combined mode the rigid exclusion is applied **once to the union** rather than per material.
@@ -69,7 +69,7 @@ layers. That single call is the whole knob.
 
 | Option | Default | Effect |
 |---|---|---|
-| Group name | `Stress` | Per-material mode appends the material title; combined mode uses it verbatim |
+| Group name | `Stress` | **Combined mode only.** Per-material groups are named for their material, with nothing added. |
 | Combine into one group | off | Union of all selected materials into a single named group |
 | Exclude elements attached to rigids | on | The exclusion above. Off leaves the artefact elements in. |
 | Plate elements cover a solid face | off | `bPlaneElem` — a solid face with a plate on it is not free. Turn on if you skin solids with plates. |

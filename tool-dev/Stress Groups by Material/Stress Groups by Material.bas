@@ -4,9 +4,11 @@
 ' as importantly, leaving out the elements whose stress is an artefact.
 '
 ' TWO MODES, set by a checkbox:
-'   ONE GROUP PER MATERIAL  named "<prefix> - <material title>"
+'   ONE GROUP PER MATERIAL  each named for its material, exactly the material
+'                           title, with nothing prepended or appended.
 '   ONE COMBINED GROUP      the union of every selected material, named exactly
 '                           what you type. Pick three materials, get one group.
+'                           This is the only mode the name box applies to.
 '
 ' Either way the contents are assembled per material as:
 '
@@ -88,10 +90,10 @@ Sub Main
     ' Every control is given far more width and height than its text needs.
     ' If a label is ever lengthened, widen the dialog with it.
     Begin Dialog StressGrpDlg 520, 250, "Stress Groups by Material"
-        Text        14,  12, 480, 16, "Group name:"
+        Text        14,  12, 480, 16, "Group name for the combined group:"
         TextBox     14,  32, 480, 20, .prefixBox
-        Text        14,  60, 480, 16, "Per material: the material title is appended to this."
-        Text        14,  78, 480, 16, "Combined: this name is used verbatim."
+        Text        14,  60, 480, 16, "Only used when combining. One group per material is"
+        Text        14,  78, 480, 16, "named for its material, with nothing added."
         CheckBox    14, 106, 480, 18, "Combine ALL selected materials into ONE group", .chkCombine
         CheckBox    14, 136, 480, 18, "Exclude elements attached to rigid elements", .chkRigid
         CheckBox    14, 158, 480, 18, "Plate elements cover a solid face (face is NOT free)", .chkPlaneElem
@@ -318,7 +320,9 @@ Sub Main
                 ' SetAdd builds selection RULES on the in-memory object, so it
                 ' must come BEFORE Put, and feGroupEvaluate forces the rules to
                 ' materialise. Put first and the group comes out empty.
-                gName = prefix & " - " & mTitle
+                ' The material title alone. Nothing is prepended or appended -
+                ' the group is named for the material it holds.
+                gName = mTitle
                 gid = gp.NextEmptyID
                 gp.title = gName
                 gp.SetAdd(FT_ELEM, keepSet.ID)
