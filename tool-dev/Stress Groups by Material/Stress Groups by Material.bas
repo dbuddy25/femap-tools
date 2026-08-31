@@ -12,7 +12,9 @@
 '
 ' AND OPTIONALLY, a second "- All" group per material (or one for the combined
 ' set): every element of that material, unfiltered - no free-face restriction
-' and no rigid exclusion. The intended use is to DISPLAY the full model from the
+' and no rigid exclusion - PLUS the rigid elements tied to that material, which
+' carry no material of their own and would otherwise be missing from a group
+' meant to draw the whole thing. The intended use is to DISPLAY the full model from the
 ' all-group while contouring stress only on the stress group, so the geometry
 ' stays visible without the artefact elements colouring the plot.
 '
@@ -75,6 +77,7 @@ Sub Main
     Dim matID As Long, gid As Long, nMade As Long
     Dim nPlate As Long, nSolid As Long, nBeam As Long, nSolidAll As Long
     Dim nBefore As Long, nRemoved As Long, nRigid As Long, nOther As Long
+    Dim nRigidTied As Long
     Dim lb As Long
 
     ' ============================================================
@@ -220,20 +223,28 @@ Sub Main
     ' touching them. AddConnectedElements() adds every element sharing at least
     ' one node with the set - that one call IS the one-element layer. Call it
     ' again to go a layer deeper.
+    ' The pure rigid set is built unconditionally - the exclusion band derives
+    ' from it, and so does the all-elements group, which needs the rigids
+    ' themselves rather than the band. Rigid (29) has no parabolic variant, so
+    ' one rule is the whole family here.
+    Dim allRigid As femap.Set
+    Set allRigid = App.feSet
+    allRigid.AddRule(FET_L_RIGID, FGD_ELEM_BYTYPE)
+    nRigid = allRigid.Count
+
     Dim rigidBand As femap.Set
     Set rigidBand = App.feSet
-    nRigid = 0
 
     If bRigid Then
-        rigidBand.AddRule(FET_L_RIGID, FGD_ELEM_BYTYPE)
-        nRigid = rigidBand.Count
+        rigidBand.AddSet(allRigid.ID)
         If nRigid > 0 Then
             rigidBand.AddConnectedElements
         End If
         App.feAppMessage(FCM_NORMAL, "Rigid elements: " & Str$(nRigid) & _
             "  -> exclusion band of " & Str$(rigidBand.Count) & " elements (rigids + 1 layer)")
     Else
-        App.feAppMessage(FCM_NORMAL, "Rigid exclusion is OFF.")
+        App.feAppMessage(FCM_NORMAL, "Rigid elements: " & Str$(nRigid) & _
+            "   (exclusion is OFF)")
     End If
 
     ' ============================================================
@@ -252,6 +263,8 @@ Sub Main
     Set combinedSet = App.feSet
     Dim combinedAll As femap.Set
     Set combinedAll = App.feSet
+    Dim allElemSet As femap.Set
+    Set allElemSet = App.feSet
 
     nMade = 0
 
@@ -362,17 +375,36 @@ Sub Main
             End If
 
             ' ---- the optional all-elements companion group ----
+            ' Rigid elements carry no material, so FGD_ELEM_BYMATL never returns
+            ' them and the all-group would be missing every RBE2/RBE3 - the
+            ' display would show the mesh with its connections gone. The rigids
+            ' TIED to this material are added back: grow a copy of the material
+            ' by one element layer, then keep only what is rigid.
             If bAll Then
+                allElemSet.Clear
+                allElemSet.AddSet(matSet.ID)
+
+                nRigidTied = 0
+                If nRigid > 0 Then
+                    workSet.Clear
+                    workSet.AddSet(matSet.ID)
+                    workSet.AddConnectedElements
+                    workSet.RemoveNotCommon(allRigid.ID)
+                    nRigidTied = workSet.Count
+                    If nRigidTied > 0 Then allElemSet.AddSet(workSet.ID)
+                End If
+
                 If bCombine Then
-                    combinedAll.AddSet(matSet.ID)
+                    combinedAll.AddSet(allElemSet.ID)
                 Else
                     gName = mTitle & " - All"
-                    gid = MakeGroup(App, gName, matSet.ID)
+                    gid = MakeGroup(App, gName, allElemSet.ID)
                     If gid = 0 Then
                         App.feAppMessage(FCM_ERROR, "  group Put failed for """ & gName & """")
                     Else
                         App.feAppMessage(FCM_NORMAL, "  GROUP " & Str$(gid) & " """ & gName & _
-                            """ : " & Str$(matSet.Count) & " elements (unfiltered)")
+                            """ : " & Str$(allElemSet.Count) & " elements (unfiltered, incl " & _
+                            Str$(nRigidTied) & " rigid)")
                         nMade = nMade + 1
                     End If
                 End If

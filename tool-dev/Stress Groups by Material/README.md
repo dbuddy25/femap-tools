@@ -23,7 +23,13 @@ them add up to the union total.
 
 Tick **"ALSO make an all-elements group"** and each material gets a second group named
 `<material title> - All` holding *every* element of that material — no free-face restriction,
-no rigid exclusion. In combined mode you get one `<name> - All` instead.
+no rigid exclusion — **plus the rigid elements tied to that material**. In combined mode you
+get one `<name> - All` instead.
+
+Rigids need adding back explicitly because they carry no material of their own, so
+`FGD_ELEM_BYMATL` never returns them; without this the display group would show the mesh with
+all its connections missing. They are found by growing a copy of the material's elements one
+layer with `AddConnectedElements()` and keeping only what is rigid. The count is reported.
 
 The point is display: show the full model from the all-group, then contour stress only on the
 stress group. The geometry stays visible without the artefact elements colouring the plot.
