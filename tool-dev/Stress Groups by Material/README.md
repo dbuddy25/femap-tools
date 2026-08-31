@@ -81,14 +81,20 @@ layers. That single call is the whole knob.
 | Group name | `Stress` | **Combined mode only.** Per-material groups are named for their material, with nothing added. |
 | Combine into one group | off | Union of all selected materials into a single named group |
 | Exclude elements attached to rigids | on | The exclusion above. Off leaves the artefact elements in. |
-| Plate elements cover a solid face | off | `bPlaneElem` — a solid face with a plate on it is not free. Turn on if you skin solids with plates. |
 | Consider midside nodes | on | `bParabolicEdges` — matters on parabolic (tet10 / brick20) meshes. |
 | Also make an all-elements group | off | A second unfiltered group per material, suffixed `- All`, for display |
 
-When the plate-cover option is on, the plates are added to the set handed to
-`feElementFreeFace`, because the flag only counts plane elements that are actually *in* that
-set. Any plate that comes back owning a free face is then stripped, since only solids belong in
-the result.
+### Plates sitting on solid faces: both are kept
+
+`feElementFreeFace` takes a `bPlaneElem` flag that makes a solid face count as **not** free when
+a plate element sits on it — which drops the covered solid out of the group. That is the
+opposite of what is wanted here, so the flag is hardcoded `False` and is deliberately **not**
+exposed as an option.
+
+With it `False`, only solid-to-solid sharing decides freeness, and an exterior face with a plate
+on it has no solid behind it — so the solid stays. The plates of that material are added
+wholesale anyway. **Both the plate and the solid underneath it end up in the group**, which is
+the intent. Setting it `True` would silently delete the covered solids.
 
 ## Output
 

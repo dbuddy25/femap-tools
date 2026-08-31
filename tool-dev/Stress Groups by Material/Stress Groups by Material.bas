@@ -95,26 +95,24 @@ Sub Main
     ' proportional - a label that fits in the editor can still clip at runtime.
     ' Every control is given far more width and height than its text needs.
     ' If a label is ever lengthened, widen the dialog with it.
-    Begin Dialog StressGrpDlg 520, 288, "Stress Groups by Material"
+    Begin Dialog StressGrpDlg 520, 266, "Stress Groups by Material"
         Text        14,  12, 480, 16, "Group name for the combined group:"
         TextBox     14,  32, 480, 20, .prefixBox
         Text        14,  60, 480, 16, "Only used when combining. One group per material is"
         Text        14,  78, 480, 16, "named for its material, with nothing added."
         CheckBox    14, 106, 480, 18, "Combine ALL selected materials into ONE group", .chkCombine
         CheckBox    14, 136, 480, 18, "Exclude elements attached to rigid elements", .chkRigid
-        CheckBox    14, 158, 480, 18, "Plate elements cover a solid face (face is NOT free)", .chkPlaneElem
-        CheckBox    14, 180, 480, 18, "Consider midside nodes when finding free faces", .chkParabolic
-        CheckBox    14, 210, 480, 18, "ALSO make an all-elements group, for display", .chkAll
-        Text        30, 230, 470, 16, "Everything of that material, unfiltered, suffixed - All"
-        OKButton   150, 252, 90, 24
-        CancelButton 260, 252, 90, 24
+        CheckBox    14, 158, 480, 18, "Consider midside nodes when finding free faces", .chkParabolic
+        CheckBox    14, 188, 480, 18, "ALSO make an all-elements group, for display", .chkAll
+        Text        30, 208, 470, 16, "Everything of that material, unfiltered, suffixed - All"
+        OKButton   150, 230, 90, 24
+        CancelButton 260, 230, 90, 24
     End Dialog
 
     Dim dlg As StressGrpDlg
     dlg.prefixBox = "Stress"
     dlg.chkCombine = 0
     dlg.chkRigid = 1
-    dlg.chkPlaneElem = 0
     dlg.chkParabolic = 1
     dlg.chkAll = 0
     If Dialog(dlg) <> -1 Then
@@ -125,12 +123,11 @@ Sub Main
     prefix = Trim$(dlg.prefixBox)
     If prefix = "" Then prefix = "Stress"
 
-    Dim bRigid As Boolean, bPlane As Boolean, bParab As Boolean
+    Dim bRigid As Boolean, bParab As Boolean
     Dim bCombine As Boolean, bAll As Boolean
     bCombine = (dlg.chkCombine = 1)
     bAll = (dlg.chkAll = 1)
     bRigid = (dlg.chkRigid = 1)
-    bPlane = (dlg.chkPlaneElem = 1)
     bParab = (dlg.chkParabolic = 1)
 
     App.feAppMessage(FCM_NORMAL, "==================================================")
@@ -163,16 +160,17 @@ Sub Main
     ' ---- Free faces, computed against the WHOLE solid mesh (see header) ----
     Dim freeSolid As femap.Set
     Set freeSolid = App.feSet
-    Dim freeInput As femap.Set
 
     If allSolid.Count > 0 Then
-        ' bPlaneElem only counts plates that are IN the set handed to the call,
-        ' so when that option is on the plates must be included in the input.
-        Set freeInput = App.feSet
-        freeInput.AddSet(allSolid.ID)
-        If bPlane Then freeInput.AddSet(allPlate.ID)
-
-        rc = App.feElementFreeFace(freeInput.ID, bParab, bPlane, nFree, vFreeData)
+        ' *** bPlaneElem IS DELIBERATELY FALSE, AND IS NOT AN OPTION ***
+        ' That flag makes a solid face count as NOT free when a plate element
+        ' sits on it, which drops the covered solid out of the group. What is
+        ' wanted here is BOTH: the plate and the solid underneath it. Plates of
+        ' the material are added wholesale further down, and passing False keeps
+        ' the solid too, because only solid-to-solid sharing then decides
+        ' freeness and an exterior face with a plate on it has no solid behind
+        ' it. Setting this True would silently delete the covered solids.
+        rc = App.feElementFreeFace(allSolid.ID, bParab, False, nFree, vFreeData)
         If rc <> FE_OK Then
             App.feAppMessage(FCM_ERROR, "feElementFreeFace failed, rc=" & Str$(rc))
             Exit Sub
@@ -192,8 +190,8 @@ Sub Main
             freeSolid.AddArray(nFree, vElems)
         End If
 
-        ' A plate handed in as a "cover" can come back owning a free face. Only
-        ' solids belong in this set.
+        ' Only solids belong in this set. Cheap insurance - the call was handed
+        ' solids only, so this should be a no-op.
         freeSolid.RemoveNotCommon(allSolid.ID)
 
         App.feAppMessage(FCM_NORMAL, "Free faces found: " & Str$(nFree) & _
