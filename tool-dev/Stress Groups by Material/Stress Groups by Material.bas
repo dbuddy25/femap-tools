@@ -83,17 +83,21 @@ Sub Main
     ' ============================================================
     ' Section 2: Options
     ' ============================================================
-    Begin Dialog StressGrpDlg 320, 186, "Stress Groups by Material"
-        Text        10,   8, 300, 12, "Group name:"
-        TextBox     10,  22, 300, 14, .prefixBox
-        Text        10,  40, 300, 10, "Per material: the material title is appended to this."
-        Text        10,  51, 300, 10, "Combined: this name is used verbatim."
-        CheckBox    10,  66, 300, 12, "Combine ALL selected materials into ONE group", .chkCombine
-        CheckBox    10,  90, 300, 12, "Exclude elements attached to rigid elements", .chkRigid
-        CheckBox    10, 108, 300, 12, "Plate elements cover a solid face (face is NOT free)", .chkPlaneElem
-        CheckBox    10, 126, 300, 12, "Consider midside nodes when finding free faces", .chkParabolic
-        OKButton    70, 156, 80, 20
-        CancelButton 170, 156, 80, 20
+    ' Sizing note: these are dialog units, not pixels, and the font is
+    ' proportional - a label that fits in the editor can still clip at runtime.
+    ' Every control is given far more width and height than its text needs.
+    ' If a label is ever lengthened, widen the dialog with it.
+    Begin Dialog StressGrpDlg 520, 250, "Stress Groups by Material"
+        Text        14,  12, 480, 16, "Group name:"
+        TextBox     14,  32, 480, 20, .prefixBox
+        Text        14,  60, 480, 16, "Per material: the material title is appended to this."
+        Text        14,  78, 480, 16, "Combined: this name is used verbatim."
+        CheckBox    14, 106, 480, 18, "Combine ALL selected materials into ONE group", .chkCombine
+        CheckBox    14, 136, 480, 18, "Exclude elements attached to rigid elements", .chkRigid
+        CheckBox    14, 158, 480, 18, "Plate elements cover a solid face (face is NOT free)", .chkPlaneElem
+        CheckBox    14, 180, 480, 18, "Consider midside nodes when finding free faces", .chkParabolic
+        OKButton   150, 214, 90, 24
+        CancelButton 260, 214, 90, 24
     End Dialog
 
     Dim dlg As StressGrpDlg
