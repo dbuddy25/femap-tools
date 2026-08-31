@@ -19,6 +19,15 @@ Removal is idempotent so the answer is the same either way, but doing it at the 
 per-material lines printed along the way are pre-exclusion contributions — which is what makes
 them add up to the union total.
 
+## The optional all-elements group
+
+Tick **"ALSO make an all-elements group"** and each material gets a second group named
+`<material title> - All` holding *every* element of that material — no free-face restriction,
+no rigid exclusion. In combined mode you get one `<name> - All` instead.
+
+The point is display: show the full model from the all-group, then contour stress only on the
+stress group. The geometry stays visible without the artefact elements colouring the plot.
+
 ## The recipe
 
 For each material you select:
@@ -74,6 +83,7 @@ layers. That single call is the whole knob.
 | Exclude elements attached to rigids | on | The exclusion above. Off leaves the artefact elements in. |
 | Plate elements cover a solid face | off | `bPlaneElem` — a solid face with a plate on it is not free. Turn on if you skin solids with plates. |
 | Consider midside nodes | on | `bParabolicEdges` — matters on parabolic (tet10 / brick20) meshes. |
+| Also make an all-elements group | off | A second unfiltered group per material, suffixed `- All`, for display |
 
 When the plate-cover option is on, the plates are added to the set handed to
 `feElementFreeFace`, because the flag only counts plane elements that are actually *in* that
@@ -93,6 +103,10 @@ running union, then a final block gives the union total, the rigid removal, and 
 
 - Group population uses **SetAdd before Put**, then `feGroupEvaluate` — `SetAdd` builds
   selection *rules* on the in-memory object, so putting first yields an empty group.
+- Every group is written through `MakeGroup`, which allocates a **fresh** `femap.Group` object
+  per group. Those rules are never cleared after a `Put`, so a reused object carries each
+  earlier group's rules into the next one and the second group silently comes out holding the
+  first group's elements too. Do not hoist that allocation out to save it.
 - The free-face array is read via `LBound` rather than assuming a 0-based COM array.
 - No entities are created, so the Group Automatic Add cleanup that other tools in this repo
   need does not apply here.

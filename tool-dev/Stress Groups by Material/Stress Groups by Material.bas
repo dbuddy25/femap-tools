@@ -10,6 +10,12 @@
 '                           what you type. Pick three materials, get one group.
 '                           This is the only mode the name box applies to.
 '
+' AND OPTIONALLY, a second "- All" group per material (or one for the combined
+' set): every element of that material, unfiltered - no free-face restriction
+' and no rigid exclusion. The intended use is to DISPLAY the full model from the
+' all-group while contouring stress only on the stress group, so the geometry
+' stays visible without the artefact elements colouring the plot.
+'
 ' Either way the contents are assembled per material as:
 '
 '   + ALL plate elements of that material          (plate, laminate, membrane)
@@ -89,7 +95,7 @@ Sub Main
     ' proportional - a label that fits in the editor can still clip at runtime.
     ' Every control is given far more width and height than its text needs.
     ' If a label is ever lengthened, widen the dialog with it.
-    Begin Dialog StressGrpDlg 520, 250, "Stress Groups by Material"
+    Begin Dialog StressGrpDlg 520, 288, "Stress Groups by Material"
         Text        14,  12, 480, 16, "Group name for the combined group:"
         TextBox     14,  32, 480, 20, .prefixBox
         Text        14,  60, 480, 16, "Only used when combining. One group per material is"
@@ -98,8 +104,10 @@ Sub Main
         CheckBox    14, 136, 480, 18, "Exclude elements attached to rigid elements", .chkRigid
         CheckBox    14, 158, 480, 18, "Plate elements cover a solid face (face is NOT free)", .chkPlaneElem
         CheckBox    14, 180, 480, 18, "Consider midside nodes when finding free faces", .chkParabolic
-        OKButton   150, 214, 90, 24
-        CancelButton 260, 214, 90, 24
+        CheckBox    14, 210, 480, 18, "ALSO make an all-elements group, for display", .chkAll
+        Text        30, 230, 470, 16, "Everything of that material, unfiltered, suffixed - All"
+        OKButton   150, 252, 90, 24
+        CancelButton 260, 252, 90, 24
     End Dialog
 
     Dim dlg As StressGrpDlg
@@ -108,6 +116,7 @@ Sub Main
     dlg.chkRigid = 1
     dlg.chkPlaneElem = 0
     dlg.chkParabolic = 1
+    dlg.chkAll = 0
     If Dialog(dlg) <> -1 Then
         App.feAppMessage(FCM_WARNING, "Cancelled - exiting")
         Exit Sub
@@ -116,8 +125,10 @@ Sub Main
     prefix = Trim$(dlg.prefixBox)
     If prefix = "" Then prefix = "Stress"
 
-    Dim bRigid As Boolean, bPlane As Boolean, bParab As Boolean, bCombine As Boolean
+    Dim bRigid As Boolean, bPlane As Boolean, bParab As Boolean
+    Dim bCombine As Boolean, bAll As Boolean
     bCombine = (dlg.chkCombine = 1)
+    bAll = (dlg.chkAll = 1)
     bRigid = (dlg.chkRigid = 1)
     bPlane = (dlg.chkPlaneElem = 1)
     bParab = (dlg.chkParabolic = 1)
@@ -219,8 +230,6 @@ Sub Main
     ' ============================================================
     Dim mt As femap.Matl
     Set mt = App.feMatl
-    Dim gp As femap.Group
-    Set gp = App.feGroup
 
     Dim matSet As femap.Set
     Set matSet = App.feSet
@@ -230,6 +239,8 @@ Sub Main
     Set workSet = App.feSet
     Dim combinedSet As femap.Set
     Set combinedSet = App.feSet
+    Dim combinedAll As femap.Set
+    Set combinedAll = App.feSet
 
     nMade = 0
 
@@ -316,24 +327,33 @@ Sub Main
             ElseIf keepSet.Count = 0 Then
                 App.feAppMessage(FCM_WARNING, "  nothing left to report on - no group created")
             Else
-                ' ---- create the group ----
-                ' SetAdd builds selection RULES on the in-memory object, so it
-                ' must come BEFORE Put, and feGroupEvaluate forces the rules to
-                ' materialise. Put first and the group comes out empty.
                 ' The material title alone. Nothing is prepended or appended -
                 ' the group is named for the material it holds.
                 gName = mTitle
-                gid = gp.NextEmptyID
-                gp.title = gName
-                gp.SetAdd(FT_ELEM, keepSet.ID)
-                rc = gp.Put(gid)
-                If rc <> FE_OK Then
-                    App.feAppMessage(FCM_ERROR, "  group Put failed, rc=" & Str$(rc))
+                gid = MakeGroup(App, gName, keepSet.ID)
+                If gid = 0 Then
+                    App.feAppMessage(FCM_ERROR, "  group Put failed for """ & gName & """")
                 Else
-                    App.feGroupEvaluate(-gid, True)
                     App.feAppMessage(FCM_NORMAL, "  GROUP " & Str$(gid) & " """ & gName & _
                         """ : " & Str$(keepSet.Count) & " elements")
                     nMade = nMade + 1
+                End If
+            End If
+
+            ' ---- the optional all-elements companion group ----
+            If bAll Then
+                If bCombine Then
+                    combinedAll.AddSet(matSet.ID)
+                Else
+                    gName = mTitle & " - All"
+                    gid = MakeGroup(App, gName, matSet.ID)
+                    If gid = 0 Then
+                        App.feAppMessage(FCM_ERROR, "  group Put failed for """ & gName & """")
+                    Else
+                        App.feAppMessage(FCM_NORMAL, "  GROUP " & Str$(gid) & " """ & gName & _
+                            """ : " & Str$(matSet.Count) & " elements (unfiltered)")
+                        nMade = nMade + 1
+                    End If
                 End If
             End If
         End If
@@ -363,16 +383,24 @@ Sub Main
             App.feAppMessage(FCM_WARNING, "  nothing left to report on - no group created")
         Else
             gName = prefix
-            gid = gp.NextEmptyID
-            gp.title = gName
-            gp.SetAdd(FT_ELEM, combinedSet.ID)
-            rc = gp.Put(gid)
-            If rc <> FE_OK Then
-                App.feAppMessage(FCM_ERROR, "  group Put failed, rc=" & Str$(rc))
+            gid = MakeGroup(App, gName, combinedSet.ID)
+            If gid = 0 Then
+                App.feAppMessage(FCM_ERROR, "  group Put failed for """ & gName & """")
             Else
-                App.feGroupEvaluate(-gid, True)
                 App.feAppMessage(FCM_NORMAL, "  GROUP " & Str$(gid) & " """ & gName & _
                     """ : " & Str$(combinedSet.Count) & " elements")
+                nMade = nMade + 1
+            End If
+        End If
+
+        If bAll And combinedAll.Count > 0 Then
+            gName = prefix & " - All"
+            gid = MakeGroup(App, gName, combinedAll.ID)
+            If gid = 0 Then
+                App.feAppMessage(FCM_ERROR, "  group Put failed for """ & gName & """")
+            Else
+                App.feAppMessage(FCM_NORMAL, "  GROUP " & Str$(gid) & " """ & gName & _
+                    """ : " & Str$(combinedAll.Count) & " elements (unfiltered)")
                 nMade = nMade + 1
             End If
         End If
@@ -384,3 +412,34 @@ Sub Main
     App.feViewRegenerate(0)
 
 End Sub
+
+
+' -----------------------------------------------------------------------------
+' MakeGroup - create one group holding the elements in elSetID.
+' Returns the new group ID, or 0 if the Put failed.
+'
+' *** A FRESH femap.Group OBJECT EVERY TIME, DELIBERATELY ***
+' SetAdd does not write entities - it builds selection RULES on the in-memory
+' group object, and Put commits whatever rules that object is holding. Nothing
+' clears them afterwards. So a single Group object reused across several groups
+' carries every earlier group's rules into each new one, and the second group
+' silently comes out holding the first group's elements as well.
+'
+' Allocating the object inside this function is what guarantees each group gets
+' only its own rules. Do not hoist it out to save an allocation.
+' -----------------------------------------------------------------------------
+Function MakeGroup(App As femap.model, gTitle As String, elSetID As Long) As Long
+    Dim g As femap.Group
+    Set g = App.feGroup
+    Dim newID As Long
+    newID = g.NextEmptyID
+    g.title = gTitle
+    g.SetAdd(FT_ELEM, elSetID)
+    If g.Put(newID) <> FE_OK Then
+        MakeGroup = 0
+    Else
+        ' Force the rules to materialise now rather than at next redraw.
+        App.feGroupEvaluate(-newID, True)
+        MakeGroup = newID
+    End If
+End Function
