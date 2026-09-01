@@ -690,6 +690,27 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
             ' before any real card has been seen, is the banner. Restricting it
             ' to before the first card means an asterisk rule the analyst writes
             ' further down the deck is untouched.
+            '
+            ' *** THE ORPHAN CONSTRAINT LABEL ***
+            ' Femap writes "$ Femap Constraint Set N : <name>" whether or not any card
+            ' belongs under it. The dummy analysis set never assigns BCSet(0), so no SPC
+            ' can ever follow it - but BCSet(1) IS assigned, and when the model has
+            ' equations Femap writes real MPC cards under that same label. So the label
+            ' cannot simply be dropped on sight.
+            '
+            ' It is held back one line instead, and dropped only when the line that
+            ' follows is ANOTHER Femap label - which proves the section was empty, because
+            ' anything belonging to it would have been a card. That keeps this clear of
+            ' the mistake called out above: it is not a comment sharing the fate of the
+            ' following card, and it can never discard a label that had content.
+            '
+            ' Narrowed to constraint labels deliberately. Another Femap section can
+            ' legitimately stack two labels - a Load Set above a Load Case - and dropping
+            ' the outer one there would lose real information.
+            Dim pendCon As String
+            Dim nOrphanCon As Long
+            pendCon = ""
+            nOrphanCon = 0
             Dim inBanner As Boolean
             Dim seenCard As Boolean
             Dim nBannerDropped As Long
@@ -711,10 +732,30 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
                                                 inBanner = True
                                                 nBannerDropped = nBannerDropped + 1
                                     Else
-                                                writeNew.WriteLine textLine
-                                                nComment = nComment + 1
+                                                ' A held constraint label meets another comment.
+                                                If pendCon <> "" Then
+                                                            If IsFemapLabel(textLine) Then
+                                                                        nOrphanCon = nOrphanCon + 1
+                                                            Else
+                                                                        writeNew.WriteLine pendCon
+                                                                        nComment = nComment + 1
+                                                            End If
+                                                            pendCon = ""
+                                                End If
+                                                If IsConstraintLabel(textLine) Then
+                                                            pendCon = textLine
+                                                Else
+                                                            writeNew.WriteLine textLine
+                                                            nComment = nComment + 1
+                                                End If
                                     End If
                         Else
+                                    ' A card follows the held label, so it was not orphaned.
+                                    If pendCon <> "" Then
+                                                writeNew.WriteLine pendCon
+                                                nComment = nComment + 1
+                                                pendCon = ""
+                                    End If
                                     seenCard = True
                         ' --- not a comment: a card line or a continuation -----
 
@@ -787,6 +828,16 @@ Function FixFile(fileName As String, customHdr As String, grpTitle As String, dr
                         App.feAppMessage(FCM_NORMAL, "  Contact cards written: " & Trim(Str$(nCon)) & "  " & conNames)
             Else
                         App.feAppMessage(FCM_NORMAL, "  Contact cards written: none")
+            End If
+
+            ' End of deck with a label still held - nothing followed it at all.
+            If pendCon <> "" Then
+                        nOrphanCon = nOrphanCon + 1
+                        pendCon = ""
+            End If
+
+            If nOrphanCon > 0 Then
+                        App.feAppMessage(FCM_NORMAL, "  Empty constraint-set label(s) dropped: " & Trim(Str$(nOrphanCon)))
             End If
 
             If nBannerDropped > 0 Then
@@ -1046,6 +1097,18 @@ Function IsContactCard(cardName As String) As Boolean
                         Or cardName = "BCTSET" Or cardName = "BCTADD" _
                         Or cardName = "BGPARM")
 
+End Function
+
+' A Femap section label - "$ Femap Property 12 : Skin", "$ Femap Load Set 3 : ...".
+' Femap writes one above each section it emits.
+Function IsFemapLabel(ln As String) As Boolean
+            IsFemapLabel = (UCase(Left(LTrim(ln), 8)) = "$ FEMAP ")
+End Function
+
+' The constraint-set label specifically. Only this one is ever held back - see
+' the comment at the copy loop for why the rule is not generalised.
+Function IsConstraintLabel(ln As String) As Boolean
+            IsConstraintLabel = (UCase(Left(LTrim(ln), 23)) = "$ FEMAP CONSTRAINT SET ")
 End Function
 
 ' -----------------------------------------------------------------------------

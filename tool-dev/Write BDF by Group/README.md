@@ -48,9 +48,34 @@ Three single-line boxes rather than one multiline box: every `TextBox` in this t
 
 ### Comment lines
 
-`$` comment lines in the bulk data are **kept unconditionally** — every one, no exceptions.
+`$` comment lines in the bulk data are **kept**, with one narrow exception below.
 
 Femap's labels sit above real bulk data, so there is nothing to gain by deciding which to drop. An intermediate version buffered comments and let each share the fate of the card below it; that could only ever lose text that was wanted. A stray label above a removed `PARAM` is harmless — a missing label is not.
+
+#### The exception: an empty constraint-set label
+
+Femap writes `$ Femap Constraint Set N : <name>` whether or not any card belongs under it, so an export could come back carrying a constraint set that is not in the group:
+
+```
+$ Femap Constraint Set 1 : Fixed Base
+$ Femap Property 12 : Skin 0.080
+PSHELL        12 ...
+```
+
+The label cannot simply be dropped on sight. The dummy analysis set never assigns `BCSet(0)`, so no `SPC` can ever follow it — but `BCSet(1)` **is** assigned, and when the model has constraint equations Femap writes real `MPC` cards under that same label.
+
+So the label is held back one line and dropped only when the line that follows is **another Femap label**, which proves the section was empty — anything belonging to it would have been a card. This is not the buffering mistake described above: it never lets a comment share the fate of the following card, and it cannot discard a label that had content.
+
+Narrowed to constraint labels deliberately. Another Femap section can legitimately stack two labels — a Load Set above a Load Case — and dropping the outer one there would lose real information.
+
+| What follows the label | Result |
+|---|---|
+| Another `$ Femap ...` label | Dropped — the section was empty |
+| An `MPC` (or any) card | Kept — the label has content |
+| A non-Femap comment | Kept — too ambiguous to drop |
+| Nothing (end of deck) | Dropped |
+
+Dropped labels are counted in the run report: `Empty constraint-set label(s) dropped: 1`.
 
 Femap's provenance banner is **not** carried into the export. See [Header notes](#header-notes).
 
