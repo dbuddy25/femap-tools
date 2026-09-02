@@ -460,6 +460,19 @@ Sub Main
     Set wsR = wbk.Worksheets(1)
     wsR.Name = "README"
 
+    ' Exactly which output vectors fed the table, listed per pass. Not
+    ' decoration: "what is the centroid column actually reading?" is not
+    ' answerable from the numbers, and on this model the plate/solid vector IDs
+    ' are the whole correctness argument.
+    '
+    ' *** DECLARED BEFORE THE LOOP THAT RESETS THEM ***
+    ' WinWrap auto-creates a variable on first use, so a Dim that appears AFTER
+    ' the first assignment is a redeclaration - "identifier is already in use" -
+    ' not a shadow and not a no-op. Moving an assignment earlier, as the pass
+    ' loop did, is enough to break a Dim that was previously fine.
+    Dim vecNote As String
+    Dim nCorner As Long
+
     ' Everything from here to the end of the sheet write runs ONCE PER PASS.
     ' The ReDims below re-zero the peak arrays each time, so pass 2 cannot
     ' inherit pass 1's numbers.
@@ -515,16 +528,6 @@ Sub Main
     Dim lo As Long, hi As Long, wantHi As Long
     Dim vecIDs As Variant
     Dim mName As String
-
-    ' Exactly which output vectors fed the table, listed for the first output
-    ' set. Not decoration: "what is the centroid column actually reading?" is
-    ' not answerable from the numbers, and on this model the plate/solid vector
-    ' IDs are the whole correctness argument. Printing them lets the IDs be
-    ' checked against Femap's own contour vector list rather than trusted.
-    Dim vecNote As String
-    Dim nCorner As Long
-    vecNote = ""
-    nCorner = 0
 
     App.feAppMessage(FCM_NORMAL, "Peak Stress Table - reading " + Trim$(Str$(nS)) + _
         " output set(s) over " + Trim$(Str$(nB)) + " bucket(s)...")
