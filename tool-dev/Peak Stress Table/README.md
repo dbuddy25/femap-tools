@@ -1,7 +1,7 @@
 # Peak Stress Table
 
 Peak stress per bucket — **group, property, material or element type** — across any number of
-output sets, written to Excel as one flat table. Read-only on the model.
+output sets, written to Excel as one table. Read-only on the model.
 
 *(file: `Peak Stress Table.bas`)*
 
