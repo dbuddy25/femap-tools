@@ -127,6 +127,9 @@ Sub Main
         Exit Sub
     End If
     dimPick = dlg.dimPick
+    ' viewNote describes where the DEFAULT came from. Once the user has picked,
+    ' saying "defaulted to corner" next to "Centroid" is just self-contradiction.
+    If dlg.locPick <> locPick Then viewNote = "chosen in the dialog"
     locPick = dlg.locPick
 
     ' ============================================================
@@ -423,9 +426,16 @@ Sub Main
     ' ever qualified. A cell with ok = 0 is written blank, not 0.
     Dim pkVM() As Double, pkMX() As Double, pkMN() As Double
     Dim okVM() As Integer, okMX() As Integer, okMN() As Integer
+    ' Diagnostics only - never written to the sheet. When the table disagrees
+    ' with a contour, the question is always "which element gave you that, and
+    ' off which vector", and it cannot be answered from the value alone.
+    Dim idVM() As Long
+    Dim srcVM() As String
     ReDim pkVM(nB - 1, nS - 1)
     ReDim pkMX(nB - 1, nS - 1)
     ReDim pkMN(nB - 1, nS - 1)
+    ReDim idVM(nB - 1, nS - 1)
+    ReDim srcVM(nB - 1, nS - 1)
     ReDim okVM(nB - 1, nS - 1)
     ReDim okMX(nB - 1, nS - 1)
     ReDim okMN(nB - 1, nS - 1)
@@ -655,6 +665,8 @@ Sub Main
                                     If vMeas(iC) = 0 Then
                                         If okVM(iB, iSet) = 0 Or dVal > pkVM(iB, iSet) Then
                                             pkVM(iB, iSet) = dVal
+                                            idVM(iB, iSet) = eID
+                                            srcVM(iB, iSet) = vLabel(iC)
                                             okVM(iB, iSet) = 1
                                         End If
                                     ElseIf vMeas(iC) = 1 Then
@@ -963,6 +975,36 @@ Sub Main
         App.feAppMessage(FCM_WARNING, "  Bucket overlap:   " + Trim$(Str$(nOverlap)) _
             + " element assignments overwritten - see the README sheet.")
     End If
+    ' Where each von Mises peak came from. Check one of these elements in Femap
+    ' and the disagreement resolves itself: if the element really carries that
+    ' value, the read is right and the BUCKET is the difference; if it does not,
+    ' the read is wrong. The value on its own cannot tell you which.
+    App.feAppMessage(FCM_NORMAL, "")
+    App.feAppMessage(FCM_NORMAL, "  Governing von Mises per bucket (check these elements):")
+    Dim gS As Long
+    Dim gV As Double
+    For iB = 0 To nB - 1
+        gS = -1
+        gV = 0.0
+        For iSet = 0 To nS - 1
+            If okVM(iB, iSet) <> 0 Then
+                If gS < 0 Or pkVM(iB, iSet) > gV Then
+                    gV = pkVM(iB, iSet)
+                    gS = iSet
+                End If
+            End If
+        Next iSet
+        If gS < 0 Then
+            App.feAppMessage(FCM_NORMAL, "    " + bName(iB) + "  -  no data")
+        Else
+            App.feAppMessage(FCM_NORMAL, "    " + bName(iB) + "  " _
+                + Format$(gV, "0.000E+00") + "  @elem " + Trim$(Str$(idVM(iB, gS))) _
+                + "  [" + srcVM(iB, gS) + "]  set " + setName(gS) _
+                + "   (" + Trim$(Str$(bElems(iB))) + " elems in bucket)")
+        End If
+    Next iB
+
+    App.feAppMessage(FCM_NORMAL, "")
     App.feAppMessage(FCM_NORMAL, "  Nothing in the model was modified.")
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")
 End Sub
