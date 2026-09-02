@@ -105,14 +105,19 @@ Sub Main
     End If
     On Error GoTo 0
 
-    Begin Dialog PeakDlg 340, 136, "Peak Stress Table"
-        Text        12, 14, 116, 12, "Summarise peaks by:"
-        DropListBox 132, 12, 196, 120, dimNames(), .dimPick
-        Text        12, 42, 116, 12, "Stress read at:"
-        DropListBox 132, 40, 196, 100, locNames(), .locPick
-        Text        12, 66, 316, 20, "Next you will pick the output sets, then the buckets themselves."
-        OKButton     92, 106, 76, 20
-        CancelButton 176, 106, 76, 20
+    ' Labels get far more width than the text appears to need. The dialog font
+    ' is PROPORTIONAL, so a width guessed from the character count clips the
+    ' descender end of the string - and it clips silently, looking like a typo
+    ' rather than a layout bug.
+    Begin Dialog PeakDlg 420, 152, "Peak Stress Table"
+        Text        12, 15, 150, 14, "Summarise peaks by:"
+        DropListBox 168, 12, 240, 120, dimNames(), .dimPick
+        Text        12, 47, 150, 14, "Stress read at:"
+        DropListBox 168, 44, 240, 100, locNames(), .locPick
+        Text        12, 78, 396, 14, "Corner values are unaveraged. The default follows the active view."
+        Text        12, 94, 396, 14, "Next you will pick the output sets, then the buckets themselves."
+        OKButton    136, 118, 76, 22
+        CancelButton 220, 118, 76, 22
     End Dialog
     Dim dlg As PeakDlg
     dlg.dimPick = 0
