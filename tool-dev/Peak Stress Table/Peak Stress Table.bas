@@ -420,6 +420,57 @@ Sub Main
     Set q = App.feResultsIDQuery
 
     ' ============================================================
+    ' Section 5b: How many passes
+    ' ============================================================
+    ' "Both" means two SEPARATE tables, not one merged worst-of. Corner and
+    ' centroid are different measurements of the same model, and the useful
+    ' thing is comparing them side by side - a merged column hides which one
+    ' produced the number, which is exactly the question that gets asked.
+    Dim nPass As Long
+    Dim passLoc(1) As Long
+    Dim iPass As Long
+    Dim curLoc As Long
+    If locPick = 2 Then
+        nPass = 2
+        passLoc(0) = 0
+        passLoc(1) = 1
+    Else
+        nPass = 1
+        passLoc(0) = locPick
+    End If
+
+    Dim locSummary As String
+    If nPass > 1 Then
+        locSummary = "Corner (unaveraged) and Centroid, as two separate sheets"
+    Else
+        locSummary = locNames(locPick)
+    End If
+
+    Dim appExcel As Object
+    On Error Resume Next
+    Set appExcel = CreateObject("Excel.Application")
+    On Error GoTo 0
+    If appExcel Is Nothing Then
+        App.feAppMessage(FCM_ERROR, "Could not start Excel - exiting")
+        Exit Sub
+    End If
+    Dim wbk As Object
+    Set wbk = appExcel.Workbooks.Add
+    Dim wsR As Object
+    Set wsR = wbk.Worksheets(1)
+    wsR.Name = "README"
+
+    ' Everything from here to the end of the sheet write runs ONCE PER PASS.
+    ' The ReDims below re-zero the peak arrays each time, so pass 2 cannot
+    ' inherit pass 1's numbers.
+    For iPass = 0 To nPass - 1
+        curLoc = passLoc(iPass)
+        App.feAppMessage(FCM_NORMAL, "")
+        App.feAppMessage(FCM_NORMAL, "=== " + locNames(curLoc) + " ===")
+        vecNote = ""
+        nCorner = 0
+
+    ' ============================================================
     ' Section 6: Walk the output sets
     ' ============================================================
     ' pk*(bucket, set) hold the peaks; ok*(bucket, set) says whether any row
@@ -511,11 +562,11 @@ Sub Main
                 If rc <> FE_FAIL And IsArray(vecIDs) Then
                     lo = LBound(vecIDs)
                     hi = UBound(vecIDs)
-                    ' locPick: 0 corner only, 1 centroid only, 2 both
+                    ' curLoc: 0 corner only, 1 centroid only (2 = both is two passes)
                     wantHi = lo + 4
                     If hi > wantHi Then hi = wantHi
                     For j = lo To hi
-                        If (locPick = 1 And j <> lo) Or (locPick = 0 And j = lo) Then
+                        If (curLoc = 1 And j <> lo) Or (curLoc = 0 And j = lo) Then
                             ' skipped by the location choice
                         ElseIf NVEC < MAXCOL Then
                             If CLng(vecIDs(j)) > 0 Then
@@ -553,7 +604,7 @@ Sub Main
                 wantHi = lo + 8
                 If hi > wantHi Then hi = wantHi
                 For j = lo To hi
-                    If (locPick = 1 And j <> lo) Or (locPick = 0 And j = lo) Then
+                    If (curLoc = 1 And j <> lo) Or (curLoc = 0 And j = lo) Then
                         ' skipped by the location choice
                     ElseIf NVEC < MAXCOL Then
                         If CLng(vecIDs(j)) > 0 Then
@@ -594,7 +645,7 @@ Sub Main
             ' Corner asked for and none found means the solve wrote centroidal
             ' data only. The table is not wrong, but it is not what was asked
             ' for, and it will read low against a corner-data plot.
-            If locPick = 0 And nCorner = 0 Then
+            If curLoc = 0 And nCorner = 0 Then
                 App.feAppMessage(FCM_WARNING, "    Corner data was requested but this model has " _
                     + "NONE - every vector above is centroidal.")
                 App.feAppMessage(FCM_WARNING, "    The table will read low against a corner-data plot.")
@@ -707,22 +758,18 @@ Sub Main
     ' The envelope is across output sets only, never across buckets: von Mises
     ' and Max Principal take the largest, Min Principal takes the most NEGATIVE.
     ' It is omitted for a single output set, where it would just repeat it.
-    Dim appExcel As Object
-    On Error Resume Next
-    Set appExcel = CreateObject("Excel.Application")
-    On Error GoTo 0
-    If appExcel Is Nothing Then
-        App.feAppMessage(FCM_ERROR, "Could not start Excel - exiting")
-        Exit Sub
-    End If
-    Dim wbk As Object
-    Set wbk = appExcel.Workbooks.Add
-    Dim wsR As Object
-    Set wsR = wbk.Worksheets(1)
-    wsR.Name = "README"
+
     Dim wsD As Object
     Set wsD = wbk.Worksheets.Add
-    wsD.Name = "Peak Stress"
+    If nPass > 1 Then
+        If curLoc = 0 Then
+            wsD.Name = "Corner"
+        Else
+            wsD.Name = "Centroid"
+        End If
+    Else
+        wsD.Name = "Peak Stress"
+    End If
 
     Dim hdrRow As Long, firstRow As Long, lastRow As Long
     Dim envCol As Long, lastCol As Long, cBase As Long
@@ -855,6 +902,38 @@ Sub Main
     appExcel.ActiveWindow.DisplayGridlines = False
     On Error GoTo 0
 
+    ' Where each von Mises peak came from. Check one of these elements in Femap
+    ' and the disagreement resolves itself: if the element really carries that
+    ' value, the read is right and the BUCKET is the difference; if it does not,
+    ' the read is wrong. The value on its own cannot tell you which.
+    App.feAppMessage(FCM_NORMAL, "")
+    App.feAppMessage(FCM_NORMAL, "  Governing von Mises per bucket (check these elements):")
+    Dim gS As Long
+    Dim gV As Double
+    For iB = 0 To nB - 1
+        gS = -1
+        gV = 0.0
+        For iSet = 0 To nS - 1
+            If okVM(iB, iSet) <> 0 Then
+                If gS < 0 Or pkVM(iB, iSet) > gV Then
+                    gV = pkVM(iB, iSet)
+                    gS = iSet
+                End If
+            End If
+        Next iSet
+        If gS < 0 Then
+            App.feAppMessage(FCM_NORMAL, "    " + bName(iB) + "  -  no data")
+        Else
+            App.feAppMessage(FCM_NORMAL, "    " + bName(iB) + "  " _
+                + Format$(gV, "0.000E+00") + "  @elem " + Trim$(Str$(idVM(iB, gS))) _
+                + "  [" + srcVM(iB, gS) + "]  set " + setName(gS) _
+                + "   (" + Trim$(Str$(bElems(iB))) + " elems in bucket)")
+        End If
+    Next iB
+
+    Next iPass
+
+
     ' ============================================================
     ' Section 8: README sheet
     ' ============================================================
@@ -875,7 +954,15 @@ Sub Main
     wsR.Cells(8, 1).Value = "Output sets:"
     wsR.Cells(8, 2).Value = nS
     wsR.Cells(9, 1).Value = "Stress read at:"
-    wsR.Cells(9, 2).Value = locNames(locPick) + "   (" + viewNote + ")"
+    wsR.Cells(9, 2).Value = locSummary + "   (" + viewNote + ")"
+
+    If nPass > 1 Then
+        wsR.Cells(10, 1).Value = "Two sheets:"
+        wsR.Cells(10, 2).Value = "CORNER holds the unaveraged corner values; CENTROID holds the " _
+            + "solver's centroidal values. Same buckets, same output sets, same layout, so the " _
+            + "two sheets can be compared cell for cell. They are kept apart rather than merged " _
+            + "because a merged column hides which location produced the number."
+    End If
 
     wsR.Cells(11, 1).Value = "Layout:"
     wsR.Cells(11, 2).Value = "One row per bucket. Each output set contributes its own block of " _
@@ -967,7 +1054,7 @@ Sub Main
     App.feAppMessage(FCM_NORMAL, "  Bucketed by:      " + dimNames(dimPick))
     App.feAppMessage(FCM_NORMAL, "  Buckets:          " + Trim$(Str$(nB)))
     App.feAppMessage(FCM_NORMAL, "  Output sets:      " + Trim$(Str$(nS)))
-    App.feAppMessage(FCM_NORMAL, "  Stress read at:   " + locNames(locPick) + "   (" + viewNote + ")")
+    App.feAppMessage(FCM_NORMAL, "  Stress read at:   " + locSummary + "   (" + viewNote + ")")
     If nMissing > 0 Then
         App.feAppMessage(FCM_WARNING, "  Missing vectors:  " + missNote)
     End If
@@ -975,35 +1062,6 @@ Sub Main
         App.feAppMessage(FCM_WARNING, "  Bucket overlap:   " + Trim$(Str$(nOverlap)) _
             + " element assignments overwritten - see the README sheet.")
     End If
-    ' Where each von Mises peak came from. Check one of these elements in Femap
-    ' and the disagreement resolves itself: if the element really carries that
-    ' value, the read is right and the BUCKET is the difference; if it does not,
-    ' the read is wrong. The value on its own cannot tell you which.
-    App.feAppMessage(FCM_NORMAL, "")
-    App.feAppMessage(FCM_NORMAL, "  Governing von Mises per bucket (check these elements):")
-    Dim gS As Long
-    Dim gV As Double
-    For iB = 0 To nB - 1
-        gS = -1
-        gV = 0.0
-        For iSet = 0 To nS - 1
-            If okVM(iB, iSet) <> 0 Then
-                If gS < 0 Or pkVM(iB, iSet) > gV Then
-                    gV = pkVM(iB, iSet)
-                    gS = iSet
-                End If
-            End If
-        Next iSet
-        If gS < 0 Then
-            App.feAppMessage(FCM_NORMAL, "    " + bName(iB) + "  -  no data")
-        Else
-            App.feAppMessage(FCM_NORMAL, "    " + bName(iB) + "  " _
-                + Format$(gV, "0.000E+00") + "  @elem " + Trim$(Str$(idVM(iB, gS))) _
-                + "  [" + srcVM(iB, gS) + "]  set " + setName(gS) _
-                + "   (" + Trim$(Str$(bElems(iB))) + " elems in bucket)")
-        End If
-    Next iB
-
     App.feAppMessage(FCM_NORMAL, "")
     App.feAppMessage(FCM_NORMAL, "  Nothing in the model was modified.")
     App.feAppMessage(FCM_HIGHLIGHT, "========================================")

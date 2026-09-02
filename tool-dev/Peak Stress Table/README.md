@@ -31,8 +31,13 @@ where it would only repeat it. The von Mises cell of the governing set is tinted
 | Choice | |
 |---|---|
 | **Corner, unaveraged** | default; the worst of the element's corners |
-| Centroid | one value per element |
-| Both | worst of the two |
+| Centroid | the solver's value at the element centroid, one per element |
+| Both | **two sheets**, `Corner` and `Centroid` — not a merged worst-of |
+
+**Both runs the whole thing twice** and writes two sheets with identical buckets, output sets and
+layout, so they compare cell for cell. They are kept apart rather than merged because a merged
+column hides which location produced the number — which is precisely the question that gets asked
+when a value is queried.
 
 **Centroidal stress is materially lower than corner stress on the same element.** A table built
 on the centroid does not disagree with Femap's own group max by a rounding error — it disagrees
