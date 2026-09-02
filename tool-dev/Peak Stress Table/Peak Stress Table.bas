@@ -404,6 +404,8 @@ Sub Main
     Dim vClass() As Long
     Dim vVec() As Long
     Dim vLabel() As String
+    Dim vLoc() As Long
+    ReDim vLoc(MAXCOL - 1)
     ReDim vMeas(MAXCOL - 1)
     ReDim vClass(MAXCOL - 1)
     ReDim vVec(MAXCOL - 1)
@@ -453,6 +455,16 @@ Sub Main
     Dim vecIDs As Variant
     Dim mName As String
 
+    ' Exactly which output vectors fed the table, listed for the first output
+    ' set. Not decoration: "what is the centroid column actually reading?" is
+    ' not answerable from the numbers, and on this model the plate/solid vector
+    ' IDs are the whole correctness argument. Printing them lets the IDs be
+    ' checked against Femap's own contour vector list rather than trusted.
+    Dim vecNote As String
+    Dim nCorner As Long
+    vecNote = ""
+    nCorner = 0
+
     App.feAppMessage(FCM_NORMAL, "Peak Stress Table - reading " + Trim$(Str$(nS)) + _
         " output set(s) over " + Trim$(Str$(nB)) + " bucket(s)...")
 
@@ -500,6 +512,7 @@ Sub Main
                                 vMeas(NVEC) = m
                                 vClass(NVEC) = 1
                                 vVec(NVEC) = CLng(vecIDs(j))
+                                vLoc(NVEC) = j - lo
                                 If ply = 0 Then
                                     vLabel(NVEC) = "Plate Top " + mName
                                 Else
@@ -537,6 +550,7 @@ Sub Main
                             vMeas(NVEC) = m
                             vClass(NVEC) = 2
                             vVec(NVEC) = CLng(vecIDs(j))
+                            vLoc(NVEC) = j - lo
                             vLabel(NVEC) = "Solid " + mName
                             NVEC = NVEC + 1
                         End If
@@ -548,6 +562,33 @@ Sub Main
         If NVEC = 0 Then
             App.feAppMessage(FCM_WARNING, "    No stress vectors in this set - left blank.")
             nMissing = nMissing + 1
+        End If
+
+        ' Report the vectors once, off the first output set - they are the same
+        ' vectors every set, only the data behind them changes.
+        If iSet = 0 Then
+            Dim locWord As String
+            For iC = 0 To NVEC - 1
+                If vLoc(iC) = 0 Then
+                    locWord = "centroid"
+                Else
+                    locWord = "corner " + Trim$(Str$(vLoc(iC)))
+                    nCorner = nCorner + 1
+                End If
+                App.feAppMessage(FCM_NORMAL, "      " + vLabel(iC) + "  [" + locWord + "]  vec " _
+                    + Trim$(Str$(vVec(iC))))
+                If Len(vecNote) > 0 Then vecNote = vecNote + ";  "
+                vecNote = vecNote + vLabel(iC) + " [" + locWord + "] " + Trim$(Str$(vVec(iC)))
+            Next iC
+
+            ' Corner asked for and none found means the solve wrote centroidal
+            ' data only. The table is not wrong, but it is not what was asked
+            ' for, and it will read low against a corner-data plot.
+            If locPick = 0 And nCorner = 0 Then
+                App.feAppMessage(FCM_WARNING, "    Corner data was requested but this model has " _
+                    + "NONE - every vector above is centroidal.")
+                App.feAppMessage(FCM_WARNING, "    The table will read low against a corner-data plot.")
+            End If
         End If
 
         ' --- load them --------------------------------------------------
@@ -873,10 +914,18 @@ Sub Main
         + Trim$(Str$(nP)) + " plate/membrane, " + Trim$(Str$(nSo)) + " solid. Only those two " _
         + "classes carry the stress vectors used here."
 
+    wsR.Cells(25, 1).Value = "Vectors used:"
+    wsR.Cells(25, 2).Value = vecNote
+    wsR.Cells(26, 1).Value = ""
+    wsR.Cells(26, 2).Value = "Listed so they can be checked against Femap's own contour vector " _
+        + "list rather than trusted. [centroid] is the solver's value at the element centroid - " _
+        + "one number per element, no averaging. [corner N] is that element's raw corner value, " _
+        + "also unaveraged."
+
     wsR.Rows("1:1").Font.Bold = True
     wsR.Columns(1).ColumnWidth = 22
     wsR.Columns(2).ColumnWidth = 110
-    wsR.Range(wsR.Cells(1, 2), wsR.Cells(23, 2)).WrapText = True
+    wsR.Range(wsR.Cells(1, 2), wsR.Cells(26, 2)).WrapText = True
 
     wsR.Activate
     appExcel.Visible = True

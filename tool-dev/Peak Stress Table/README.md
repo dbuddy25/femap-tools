@@ -48,6 +48,27 @@ Corner values are read **raw** from the corner vectors, so they are unaveraged b
 The tool does no nodal averaging at all; matching an *averaged* contour would mean averaging
 across the elements meeting at each node, which is a different number and is not offered.
 
+**Centroid** is equally unaveraged: it is `VectorIDs[0]`, the same vector as
+`Plate(..., VPL_CENTROID)` — the solver's own value at the element centroid, one number per
+element. It is not an average of the corners.
+
+### Which vectors did it actually use?
+
+The tool lists them, to the Messages window and onto the README sheet:
+
+```
+      Plate Top vonMises  [centroid]  vec 7033
+      Plate Bot vonMises  [centroid]  vec 9033
+      Solid vonMises      [centroid]  vec 60031
+```
+
+Check those IDs against Femap's own contour vector list. "What is the centroid column actually
+reading?" is not answerable from the numbers, and on this model the plate/solid vector IDs are the
+whole correctness argument — so they are printed rather than trusted.
+
+If corner data is requested and the model has none, every vector comes back centroidal and the
+tool says so outright, because the table will then read low against a corner-data plot.
+
 ## API notes
 
 - `PlateWithCorners(result, type, ply, VectorIDs)` → **five** IDs: `0` centroid, `1..4` corners.
