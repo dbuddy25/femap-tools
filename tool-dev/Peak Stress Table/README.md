@@ -9,18 +9,20 @@ output sets, written to Excel as one flat table. Read-only on the model.
 
 ## The table
 
-One row per bucket per output set, three measures side by side:
+One row per bucket. Each output set contributes its own block of three measures, in the order you
+picked them, with an envelope block last:
 
-| Bucket | Elements | Output Set | Von Mises | vM Elem | Max Prin | MaxP Elem | Min Prin | MinP Elem |
-|---|---|---|---|---|---|---|---|---|
+| Bucket | Elements | *set 1* Von Mises | Max Prin | Min Prin | *set 2* Von Mises | Max Prin | Min Prin | **ENV** Von Mises | Max Prin | Min Prin |
+|---|---|---|---|---|---|---|---|---|---|---|
 
-Flat rather than a grid per measure: AutoFilter and sorting keep working, it grows *down* as
-load cases are added instead of sideways, and finding the governing case is a sort rather than a
-second sheet. A wide layout would need each set name spanning three columns, and a merged header
-row breaks both filtering and sorting. With more than one output set the governing row for each
-bucket is tinted.
+The header is **one row**, with the set name and the measure stacked inside a single cell by a
+line break. Merging the set name across its three columns would look tidier and would break both
+sorting and AutoFilter.
 
-**Min Principal envelopes downward** — the governing value is the most negative, not the largest.
+**The envelope is across output sets only, never across buckets.** Von Mises and Max Principal
+take the largest value; Min Principal takes the most **negative**, because the governing
+compressive value is the most negative, not the largest. It is omitted for a single output set,
+where it would only repeat it. The von Mises cell of the governing set is tinted on each row.
 
 ## Where the stress is read — the setting that decides whether it agrees with Femap
 

@@ -415,14 +415,10 @@ Sub Main
     ' pk*(bucket, set) hold the peaks; ok*(bucket, set) says whether any row
     ' ever qualified. A cell with ok = 0 is written blank, not 0.
     Dim pkVM() As Double, pkMX() As Double, pkMN() As Double
-    Dim idVM() As Long,   idMX() As Long,   idMN() As Long
     Dim okVM() As Integer, okMX() As Integer, okMN() As Integer
     ReDim pkVM(nB - 1, nS - 1)
     ReDim pkMX(nB - 1, nS - 1)
     ReDim pkMN(nB - 1, nS - 1)
-    ReDim idVM(nB - 1, nS - 1)
-    ReDim idMX(nB - 1, nS - 1)
-    ReDim idMN(nB - 1, nS - 1)
     ReDim okVM(nB - 1, nS - 1)
     ReDim okMX(nB - 1, nS - 1)
     ReDim okMN(nB - 1, nS - 1)
@@ -443,6 +439,15 @@ Sub Main
     nMissing = 0
     missNote = ""
 
+    ' Scratch for the per-set vector lookup below. Declared here rather than
+    ' inside the loop: WinWrap identifiers are case-insensitive, and a second
+    ' Dim of a name already taken - vecIDs against GetColumn's vIDs - is an
+    ' "identifier is already in use" error, not a shadow.
+    Dim m As Long, ply As Long, j As Long
+    Dim lo As Long, hi As Long, wantHi As Long
+    Dim vecIDs As Variant
+    Dim mName As String
+
     App.feAppMessage(FCM_NORMAL, "Peak Stress Table - reading " + Trim$(Str$(nS)) + _
         " output set(s) over " + Trim$(Str$(nB)) + " bucket(s)...")
 
@@ -453,10 +458,6 @@ Sub Main
 
         ' --- work out which vectors exist in THIS set --------------------
         NVEC = 0
-        Dim m As Long, ply As Long, j As Long
-        Dim lo As Long, hi As Long, wantHi As Long
-        Dim vids As Variant
-        Dim mName As String
 
         For m = 0 To 2
             If m = 0 Then
@@ -472,17 +473,17 @@ Sub Main
                 rc = FE_FAIL
                 On Error Resume Next
                 If m = 0 Then
-                    rc = q.PlateWithCorners(VPV_STRESS, VPT_VON_MISES, PlyVal(ply), vids)
+                    rc = q.PlateWithCorners(VPV_STRESS, VPT_VON_MISES, PlyVal(ply), vecIDs)
                 ElseIf m = 1 Then
-                    rc = q.PlateWithCorners(VPV_STRESS, VPT_MAX_PRIN, PlyVal(ply), vids)
+                    rc = q.PlateWithCorners(VPV_STRESS, VPT_MAX_PRIN, PlyVal(ply), vecIDs)
                 Else
-                    rc = q.PlateWithCorners(VPV_STRESS, VPT_MIN_PRIN, PlyVal(ply), vids)
+                    rc = q.PlateWithCorners(VPV_STRESS, VPT_MIN_PRIN, PlyVal(ply), vecIDs)
                 End If
                 On Error GoTo 0
 
-                If rc <> FE_FAIL And IsArray(vids) Then
-                    lo = LBound(vids)
-                    hi = UBound(vids)
+                If rc <> FE_FAIL And IsArray(vecIDs) Then
+                    lo = LBound(vecIDs)
+                    hi = UBound(vecIDs)
                     ' locPick: 0 corner only, 1 centroid only, 2 both
                     wantHi = lo + 4
                     If hi > wantHi Then hi = wantHi
@@ -490,10 +491,10 @@ Sub Main
                         If (locPick = 1 And j <> lo) Or (locPick = 0 And j = lo) Then
                             ' skipped by the location choice
                         ElseIf NVEC < MAXCOL Then
-                            If CLng(vids(j)) > 0 Then
+                            If CLng(vecIDs(j)) > 0 Then
                                 vMeas(NVEC) = m
                                 vClass(NVEC) = 1
-                                vVec(NVEC) = CLng(vids(j))
+                                vVec(NVEC) = CLng(vecIDs(j))
                                 If ply = 0 Then
                                     vLabel(NVEC) = "Plate Top " + mName
                                 Else
@@ -510,27 +511,27 @@ Sub Main
             rc = FE_FAIL
             On Error Resume Next
             If m = 0 Then
-                rc = q.SolidWithCorners(VSV_STRESS, VST_VON_MISES, vids)
+                rc = q.SolidWithCorners(VSV_STRESS, VST_VON_MISES, vecIDs)
             ElseIf m = 1 Then
-                rc = q.SolidWithCorners(VSV_STRESS, VST_MAX_PRIN, vids)
+                rc = q.SolidWithCorners(VSV_STRESS, VST_MAX_PRIN, vecIDs)
             Else
-                rc = q.SolidWithCorners(VSV_STRESS, VST_MIN_PRIN, vids)
+                rc = q.SolidWithCorners(VSV_STRESS, VST_MIN_PRIN, vecIDs)
             End If
             On Error GoTo 0
 
-            If rc <> FE_FAIL And IsArray(vids) Then
-                lo = LBound(vids)
-                hi = UBound(vids)
+            If rc <> FE_FAIL And IsArray(vecIDs) Then
+                lo = LBound(vecIDs)
+                hi = UBound(vecIDs)
                 wantHi = lo + 8
                 If hi > wantHi Then hi = wantHi
                 For j = lo To hi
                     If (locPick = 1 And j <> lo) Or (locPick = 0 And j = lo) Then
                         ' skipped by the location choice
                     ElseIf NVEC < MAXCOL Then
-                        If CLng(vids(j)) > 0 Then
+                        If CLng(vecIDs(j)) > 0 Then
                             vMeas(NVEC) = m
                             vClass(NVEC) = 2
-                            vVec(NVEC) = CLng(vids(j))
+                            vVec(NVEC) = CLng(vecIDs(j))
                             vLabel(NVEC) = "Solid " + mName
                             NVEC = NVEC + 1
                         End If
@@ -592,13 +593,11 @@ Sub Main
                                     If vMeas(iC) = 0 Then
                                         If okVM(iB, iSet) = 0 Or dVal > pkVM(iB, iSet) Then
                                             pkVM(iB, iSet) = dVal
-                                            idVM(iB, iSet) = eID
                                             okVM(iB, iSet) = 1
                                         End If
                                     ElseIf vMeas(iC) = 1 Then
                                         If okMX(iB, iSet) = 0 Or dVal > pkMX(iB, iSet) Then
                                             pkMX(iB, iSet) = dVal
-                                            idMX(iB, iSet) = eID
                                             okMX(iB, iSet) = 1
                                         End If
                                     Else
@@ -606,7 +605,6 @@ Sub Main
                                         ' governing value is the most compressive.
                                         If okMN(iB, iSet) = 0 Or dVal < pkMN(iB, iSet) Then
                                             pkMN(iB, iSet) = dVal
-                                            idMN(iB, iSet) = eID
                                             okMN(iB, iSet) = 1
                                         End If
                                     End If
@@ -620,14 +618,21 @@ Sub Main
     Next iSet
 
     ' ============================================================
-    ' Section 7: Excel - ONE flat table
+    ' Section 7: Excel - one row per bucket, output sets across
     ' ============================================================
-    ' One row per bucket per output set, three measure columns side by side.
-    ' Flat rather than a grid-per-measure: it keeps AutoFilter and sorting
-    ' working, it grows DOWN as load cases are added instead of sideways, and
-    ' finding the governing case is a sort rather than a second sheet. A wide
-    ' layout would need the set names spanning three columns each, and a merged
-    ' header row breaks both filtering and sorting.
+    ' Layout: Bucket | Elements | <set 1 vM, MaxP, MinP> | <set 2 ...> | ENVELOPE
+    '
+    ' One row per bucket, each output set contributing its own block of three
+    ' measures in the order they were picked, and an envelope block last.
+    '
+    ' The header is ONE row, with the set name and the measure stacked inside a
+    ' single cell by a line break. Merging the set name across its three columns
+    ' would look tidier and would break both sorting and AutoFilter - the whole
+    ' point of a flat header.
+    '
+    ' The envelope is across output sets only, never across buckets: von Mises
+    ' and Max Principal take the largest, Min Principal takes the most NEGATIVE.
+    ' It is omitted for a single output set, where it would just repeat it.
     Dim appExcel As Object
     On Error Resume Next
     Set appExcel = CreateObject("Excel.Application")
@@ -646,120 +651,143 @@ Sub Main
     wsD.Name = "Peak Stress"
 
     Dim hdrRow As Long, firstRow As Long, lastRow As Long
+    Dim envCol As Long, lastCol As Long, cBase As Long
+    Dim wantEnv As Boolean
     hdrRow = 2
     firstRow = 3
+    lastRow = firstRow + nB - 1
+    wantEnv = (nS > 1)
+    envCol = 4 + nS * 3
+    If wantEnv Then
+        lastCol = envCol + 2
+    Else
+        lastCol = envCol - 1
+    End If
 
-    ' Bucket and Output Set are forced to Text BEFORE anything is written. Excel
-    ' type-infers on write, so a group called "3-4 Bracket" becomes a date and
-    ' one called "1E5" becomes 100000 - silent corruption of the only columns
-    ' that identify the row, and unrecoverable once written.
+    ' Bucket names are forced to Text BEFORE anything is written. Excel type-
+    ' infers on write, so a group called "3-4 Bracket" becomes a date and one
+    ' called "1E5" becomes 100000 - silent corruption of the only column that
+    ' identifies the row, and unrecoverable once written.
     wsD.Columns(2).NumberFormat = "@"
-    wsD.Columns(4).NumberFormat = "@"
 
-    wsD.Cells(hdrRow, 2).Value  = dimNames(dimPick)
-    wsD.Cells(hdrRow, 3).Value  = "Elements"
-    wsD.Cells(hdrRow, 4).Value  = "Output Set"
-    wsD.Cells(hdrRow, 5).Value  = "Von Mises"
-    wsD.Cells(hdrRow, 6).Value  = "vM Elem"
-    wsD.Cells(hdrRow, 7).Value  = "Max Prin"
-    wsD.Cells(hdrRow, 8).Value  = "MaxP Elem"
-    wsD.Cells(hdrRow, 9).Value  = "Min Prin"
-    wsD.Cells(hdrRow, 10).Value = "MinP Elem"
+    wsD.Cells(hdrRow, 2).Value = dimNames(dimPick)
+    wsD.Cells(hdrRow, 3).Value = "Elements"
+    For iSet = 0 To nS - 1
+        cBase = 4 + iSet * 3
+        wsD.Cells(hdrRow, cBase).Value     = setName(iSet) + Chr$(10) + "Von Mises"
+        wsD.Cells(hdrRow, cBase + 1).Value = setName(iSet) + Chr$(10) + "Max Prin"
+        wsD.Cells(hdrRow, cBase + 2).Value = setName(iSet) + Chr$(10) + "Min Prin"
+    Next iSet
+    If wantEnv Then
+        wsD.Cells(hdrRow, envCol).Value     = "ENVELOPE" + Chr$(10) + "Von Mises"
+        wsD.Cells(hdrRow, envCol + 1).Value = "ENVELOPE" + Chr$(10) + "Max Prin"
+        wsD.Cells(hdrRow, envCol + 2).Value = "ENVELOPE" + Chr$(10) + "Min Prin"
+    End If
 
     Dim r As Long
-    r = firstRow
+    Dim eVM As Double, eMX As Double, eMN As Double
+    Dim hVM As Long, hMX As Long, hMN As Long
+    Dim govS As Long
+    Dim govV As Double
+
     For iB = 0 To nB - 1
+        r = firstRow + iB
+        wsD.Cells(r, 2).Value = bName(iB)
+        wsD.Cells(r, 3).Value = bElems(iB)
+
+        eVM = 0.0 : eMX = 0.0 : eMN = 0.0
+        hVM = 0 : hMX = 0 : hMN = 0
+        govS = -1
+        govV = 0.0
+
         For iSet = 0 To nS - 1
-            wsD.Cells(r, 2).Value = bName(iB)
-            wsD.Cells(r, 3).Value = bElems(iB)
-            wsD.Cells(r, 4).Value = setName(iSet)
+            cBase = 4 + iSet * 3
             ' Blank, not zero, where nothing qualified. See the README sheet.
             If okVM(iB, iSet) <> 0 Then
-                wsD.Cells(r, 5).Value = pkVM(iB, iSet)
-                wsD.Cells(r, 6).Value = idVM(iB, iSet)
+                wsD.Cells(r, cBase).Value = pkVM(iB, iSet)
+                If hVM = 0 Or pkVM(iB, iSet) > eVM Then
+                    eVM = pkVM(iB, iSet)
+                    hVM = 1
+                End If
+                If govS < 0 Or pkVM(iB, iSet) > govV Then
+                    govV = pkVM(iB, iSet)
+                    govS = iSet
+                End If
             End If
             If okMX(iB, iSet) <> 0 Then
-                wsD.Cells(r, 7).Value = pkMX(iB, iSet)
-                wsD.Cells(r, 8).Value = idMX(iB, iSet)
+                wsD.Cells(r, cBase + 1).Value = pkMX(iB, iSet)
+                If hMX = 0 Or pkMX(iB, iSet) > eMX Then
+                    eMX = pkMX(iB, iSet)
+                    hMX = 1
+                End If
             End If
             If okMN(iB, iSet) <> 0 Then
-                wsD.Cells(r, 9).Value = pkMN(iB, iSet)
-                wsD.Cells(r, 10).Value = idMN(iB, iSet)
+                wsD.Cells(r, cBase + 2).Value = pkMN(iB, iSet)
+                ' Min Principal envelopes DOWNWARD - most negative governs.
+                If hMN = 0 Or pkMN(iB, iSet) < eMN Then
+                    eMN = pkMN(iB, iSet)
+                    hMN = 1
+                End If
             End If
-            r = r + 1
         Next iSet
+
+        If wantEnv Then
+            If hVM <> 0 Then wsD.Cells(r, envCol).Value = eVM
+            If hMX <> 0 Then wsD.Cells(r, envCol + 1).Value = eMX
+            If hMN <> 0 Then wsD.Cells(r, envCol + 2).Value = eMN
+        End If
+
+        ' Amber on the von Mises cell of the set that drives this bucket, so the
+        ' governing load case is visible without reading across the row.
+        If wantEnv And govS >= 0 Then
+            wsD.Cells(r, 4 + govS * 3).Interior.Color = RGB(255, 235, 200)
+            wsD.Cells(r, 4 + govS * 3).Font.Bold = True
+        End If
     Next iB
-    lastRow = r - 1
 
     wsD.Cells.Font.Name = "Calibri"
     wsD.Cells.Font.Size = 10
     wsD.Range(wsD.Cells(firstRow, 3), wsD.Cells(lastRow, 3)).NumberFormat = "#,##0"
-    wsD.Range(wsD.Cells(firstRow, 5), wsD.Cells(lastRow, 5)).NumberFormat = "0.0000E+00"
-    wsD.Range(wsD.Cells(firstRow, 7), wsD.Cells(lastRow, 7)).NumberFormat = "0.0000E+00"
-    wsD.Range(wsD.Cells(firstRow, 9), wsD.Cells(lastRow, 9)).NumberFormat = "0.0000E+00"
-    wsD.Range(wsD.Cells(firstRow, 6), wsD.Cells(lastRow, 6)).NumberFormat = "0"
-    wsD.Range(wsD.Cells(firstRow, 8), wsD.Cells(lastRow, 8)).NumberFormat = "0"
-    wsD.Range(wsD.Cells(firstRow, 10), wsD.Cells(lastRow, 10)).NumberFormat = "0"
+    wsD.Range(wsD.Cells(firstRow, 4), wsD.Cells(lastRow, lastCol)).NumberFormat = "0.0000E+00"
 
-    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(hdrRow, 10)).Interior.Color = RGB(46, 84, 141)
-    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(hdrRow, 10)).Font.Color = RGB(255, 255, 255)
-    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(hdrRow, 10)).Font.Bold = True
-    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(hdrRow, 10)).WrapText = True
-    wsD.Rows(hdrRow).RowHeight = 30
-    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(lastRow, 10)).Borders.LineStyle = 1
-    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(lastRow, 10)).HorizontalAlignment = -4108
+    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(hdrRow, lastCol)).Interior.Color = RGB(46, 84, 141)
+    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(hdrRow, lastCol)).Font.Color = RGB(255, 255, 255)
+    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(hdrRow, lastCol)).Font.Bold = True
+    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(hdrRow, lastCol)).WrapText = True
+    wsD.Rows(hdrRow).RowHeight = 42
+    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(lastRow, lastCol)).Borders.LineStyle = 1
+    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(lastRow, lastCol)).HorizontalAlignment = -4108
     wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(lastRow, 2)).HorizontalAlignment = -4131
-    wsD.Range(wsD.Cells(hdrRow, 4), wsD.Cells(lastRow, 4)).HorizontalAlignment = -4131
 
-    ' Tint the governing row for each bucket - the load case that drives it,
-    ' visible without sorting. Only worth doing when there is a choice to make.
-    If nS > 1 Then
-        Dim bestS As Long
-        Dim bestV As Double
-        For iB = 0 To nB - 1
-            bestS = -1
-            bestV = 0.0
-            For iSet = 0 To nS - 1
-                If okVM(iB, iSet) <> 0 Then
-                    If bestS < 0 Or pkVM(iB, iSet) > bestV Then
-                        bestV = pkVM(iB, iSet)
-                        bestS = iSet
-                    End If
-                End If
-            Next iSet
-            If bestS >= 0 Then
-                r = firstRow + iB * nS + bestS
-                wsD.Range(wsD.Cells(r, 2), wsD.Cells(r, 10)).Interior.Color = RGB(255, 235, 200)
-                wsD.Range(wsD.Cells(r, 2), wsD.Cells(r, 10)).Font.Bold = True
-            End If
-        Next iB
+    ' The envelope block reads as a summary, not as another load case.
+    If wantEnv Then
+        wsD.Range(wsD.Cells(firstRow, envCol), wsD.Cells(lastRow, envCol + 2)).Interior.Color = RGB(221, 230, 243)
+        wsD.Range(wsD.Cells(firstRow, envCol), wsD.Cells(lastRow, envCol + 2)).Font.Bold = True
     End If
 
     wsD.Columns(1).ColumnWidth = 3
     wsD.Columns(2).ColumnWidth = 30
     wsD.Columns(3).ColumnWidth = 10
-    wsD.Columns(4).ColumnWidth = 26
-    wsD.Columns(5).ColumnWidth = 14
-    wsD.Columns(6).ColumnWidth = 11
-    wsD.Columns(7).ColumnWidth = 14
-    wsD.Columns(8).ColumnWidth = 11
-    wsD.Columns(9).ColumnWidth = 14
-    wsD.Columns(10).ColumnWidth = 11
+    For i = 4 To lastCol
+        wsD.Columns(i).ColumnWidth = 14
+    Next i
 
     On Error Resume Next
-    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(lastRow, 10)).AutoFilter
+    wsD.Range(wsD.Cells(hdrRow, 2), wsD.Cells(lastRow, lastCol)).AutoFilter
     wsD.Activate
     appExcel.ActiveWindow.FreezePanes = False
-    wsD.Range("E3").Select
+    wsD.Range("D3").Select
     appExcel.ActiveWindow.FreezePanes = True
     appExcel.ActiveWindow.DisplayGridlines = False
     On Error GoTo 0
 
-
     ' ============================================================
     ' Section 8: README sheet
     ' ============================================================
+    ' Everything that changes how the numbers should be read lives here, so a
+    ' sheet that gets emailed on carries its own caveats.
     wsR.Cells(1, 1).Value = "Peak Stress Table"
+
     wsR.Cells(3, 1).Value = "Model:"
     wsR.Cells(3, 2).Value = App.ModelName
     wsR.Cells(4, 1).Value = "User:"
@@ -775,63 +803,75 @@ Sub Main
     wsR.Cells(9, 1).Value = "Stress read at:"
     wsR.Cells(9, 2).Value = locNames(locPick) + "   (" + viewNote + ")"
 
-    wsR.Cells(10, 1).Value = "Measures:"
-    wsR.Cells(10, 2).Value = "Max von Mises, Max Principal (peak tension) and Min Principal " _
-        + "(peak compression). Min Principal envelopes DOWNWARD - the governing value is the " _
-        + "most negative, not the largest."
-    wsR.Cells(11, 1).Value = "Enveloped over:"
-    wsR.Cells(11, 2).Value = "Plate TOP fibre, plate BOTTOM fibre and solids, at every location " _
+    wsR.Cells(11, 1).Value = "Layout:"
+    wsR.Cells(11, 2).Value = "One row per bucket. Each output set contributes its own block of " _
+        + "three columns, in the order you picked them. With more than one set an ENVELOPE " _
+        + "block is added last, and the von Mises cell of the governing set is tinted on " _
+        + "each row."
+
+    wsR.Cells(12, 1).Value = "Envelope:"
+    wsR.Cells(12, 2).Value = "Across OUTPUT SETS only, never across buckets. Von Mises and Max " _
+        + "Principal take the largest value; Min Principal takes the most NEGATIVE, because " _
+        + "the governing compressive value is the most negative, not the largest."
+
+    wsR.Cells(14, 1).Value = "Measures:"
+    wsR.Cells(14, 2).Value = "Max von Mises, Max Principal (peak tension) and Min Principal " _
+        + "(peak compression), per bucket per output set."
+
+    wsR.Cells(15, 1).Value = "Enveloped over:"
+    wsR.Cells(15, 2).Value = "Plate TOP fibre, plate BOTTOM fibre and solids, at every location " _
         + "the setting above selects. A bucket holding both plates and solids reports the " _
         + "single governing number across all of them."
-    wsR.Cells(12, 1).Value = "Corner values:"
-    wsR.Cells(12, 2).Value = "Read RAW from the corner vectors, so they are UNAVERAGED. This " _
+
+    wsR.Cells(16, 1).Value = "Corner values:"
+    wsR.Cells(16, 2).Value = "Read RAW from the corner vectors, so they are UNAVERAGED. This " _
         + "tool does no nodal averaging; to match an averaged contour you would have to " _
         + "average across the elements meeting at each node, which is a different number. " _
         + "Centroidal stress is materially lower than corner stress on the same element, " _
         + "which is why this setting decides whether the table agrees with Femap's group max."
 
-    wsR.Cells(13, 1).Value = "Blank vs zero:"
-    wsR.Cells(13, 2).Value = "A blank cell means no element of a type carrying that result was " _
-        + "found in that bucket for that output set. It does NOT mean zero stress. Zero is " _
-        + "written only where an element really reported zero."
+    wsR.Cells(18, 1).Value = "Blank vs zero:"
+    wsR.Cells(18, 2).Value = "A blank cell means no element carrying that result was found in " _
+        + "that bucket for that output set. It does NOT mean zero stress. Zero is written " _
+        + "only where an element really reported zero."
 
-    wsR.Cells(15, 1).Value = "Element class filter:"
-    wsR.Cells(15, 2).Value = "Femap returns one results row per element that has ANY requested " _
+    wsR.Cells(19, 1).Value = "Element class filter:"
+    wsR.Cells(19, 2).Value = "Femap returns one results row per element that has ANY requested " _
         + "result, and pads the other element class with exactly 0.0. Rows are therefore " _
         + "filtered by element class before they can move a peak. Without that filter an " _
         + "all-solid bucket would report 0.0 for a plate measure, and any all-compressive " _
         + "bucket would report 0.0 for Min Principal, because 0.0 beats every negative value."
 
-    wsR.Cells(17, 1).Value = "Missing vectors:"
+    wsR.Cells(21, 1).Value = "Missing vectors:"
     If nMissing = 0 Then
-        wsR.Cells(17, 2).Value = "None - every stress vector requested resolved in every output set."
+        wsR.Cells(21, 2).Value = "None - every stress vector requested resolved in every output set."
     Else
-        wsR.Cells(17, 2).Value = "Not present in at least one output set: " + missNote _
+        wsR.Cells(21, 2).Value = "Not present in at least one output set: " + missNote _
             + ".  Those contributions are simply absent; the peaks shown come from the " _
             + "vectors that did resolve. If a plate BOTTOM vector is listed here, the solve " _
             + "may not have written bottom-surface stress - and in bending that is usually " _
             + "the governing fibre."
     End If
 
-    wsR.Cells(19, 1).Value = "Overlap:"
+    wsR.Cells(22, 1).Value = "Overlap:"
     If nOverlap = 0 Then
-        wsR.Cells(19, 2).Value = "No element appears in more than one bucket."
+        wsR.Cells(22, 2).Value = "No element appears in more than one bucket."
     Else
-        wsR.Cells(19, 2).Value = Trim$(Str$(nOverlap)) + " element assignments were overwritten " _
+        wsR.Cells(22, 2).Value = Trim$(Str$(nOverlap)) + " element assignments were overwritten " _
             + "because the buckets overlap. Each element is counted in the LAST bucket that " _
             + "claims it, so an overlapped bucket understates its peak. Peaks are maxima, not " _
             + "sums, so this cannot double-count - but it can hide one."
     End If
 
-    wsR.Cells(21, 1).Value = "Coverage:"
-    wsR.Cells(21, 2).Value = "Model has " + Trim$(Str$(nAll)) + " elements: " _
+    wsR.Cells(23, 1).Value = "Coverage:"
+    wsR.Cells(23, 2).Value = "Model has " + Trim$(Str$(nAll)) + " elements: " _
         + Trim$(Str$(nP)) + " plate/membrane, " + Trim$(Str$(nSo)) + " solid. Only those two " _
         + "classes carry the stress vectors used here."
 
     wsR.Rows("1:1").Font.Bold = True
     wsR.Columns(1).ColumnWidth = 22
     wsR.Columns(2).ColumnWidth = 110
-    wsR.Range(wsR.Cells(1, 2), wsR.Cells(21, 2)).WrapText = True
+    wsR.Range(wsR.Cells(1, 2), wsR.Cells(23, 2)).WrapText = True
 
     wsR.Activate
     appExcel.Visible = True
