@@ -71,7 +71,7 @@ Sub Main
     End Dialog
     Dim dlg As PeakDlg
     dlg.dimPick = 0
-    If Dialog(dlg) = 0 Then
+    If Dialog(dlg) <> -1 Then
         App.feAppMessage(FCM_WARNING, "Cancelled - exiting")
         Exit Sub
     End If
@@ -376,7 +376,7 @@ Sub Main
     Dim vVals As Variant
     Dim eID As Long
     Dim dVal As Double
-    Dim iB As Long, iS As Long, iC As Long
+    Dim iB As Long, iSet As Long, iC As Long
     Dim nMissing As Long
     Dim missNote As String
     nMissing = 0
@@ -385,8 +385,8 @@ Sub Main
     App.feAppMessage(FCM_NORMAL, "Peak Stress Table - reading " + Trim$(Str$(nS)) + _
         " output set(s) over " + Trim$(Str$(nB)) + " bucket(s)...")
 
-    For iS = 0 To nS - 1
-        App.feAppMessage(FCM_NORMAL, "  " + setName(iS))
+    For iSet = 0 To nS - 1
+        App.feAppMessage(FCM_NORMAL, "  " + setName(iSet))
 
         rbo.Clear
         For iC = 0 To NVEC - 1
@@ -410,7 +410,7 @@ Sub Main
             End If
 
             If vecID(iC) > 0 Then
-                rc = rbo.AddColumnV2(setID(iS), vecID(iC), False, nAdded, vCols)
+                rc = rbo.AddColumnV2(setID(iSet), vecID(iC), False, nAdded, vCols)
                 If rc = FE_OK And nAdded > 0 Then
                     colOf(iC) = vCols(0)
                 End If
@@ -446,24 +446,24 @@ Sub Main
                                 If eCls(eID) = vClass(iC) Then
                                     dVal = vVals(k)
                                     If vMeas(iC) = 0 Then
-                                        If okVM(iB, iS) = 0 Or dVal > pkVM(iB, iS) Then
-                                            pkVM(iB, iS) = dVal
-                                            idVM(iB, iS) = eID
-                                            okVM(iB, iS) = 1
+                                        If okVM(iB, iSet) = 0 Or dVal > pkVM(iB, iSet) Then
+                                            pkVM(iB, iSet) = dVal
+                                            idVM(iB, iSet) = eID
+                                            okVM(iB, iSet) = 1
                                         End If
                                     ElseIf vMeas(iC) = 1 Then
-                                        If okMX(iB, iS) = 0 Or dVal > pkMX(iB, iS) Then
-                                            pkMX(iB, iS) = dVal
-                                            idMX(iB, iS) = eID
-                                            okMX(iB, iS) = 1
+                                        If okMX(iB, iSet) = 0 Or dVal > pkMX(iB, iSet) Then
+                                            pkMX(iB, iSet) = dVal
+                                            idMX(iB, iSet) = eID
+                                            okMX(iB, iSet) = 1
                                         End If
                                     Else
                                         ' Min principal envelopes DOWNWARD - the
                                         ' governing value is the most compressive.
-                                        If okMN(iB, iS) = 0 Or dVal < pkMN(iB, iS) Then
-                                            pkMN(iB, iS) = dVal
-                                            idMN(iB, iS) = eID
-                                            okMN(iB, iS) = 1
+                                        If okMN(iB, iSet) = 0 Or dVal < pkMN(iB, iSet) Then
+                                            pkMN(iB, iSet) = dVal
+                                            idMN(iB, iSet) = eID
+                                            okMN(iB, iSet) = 1
                                         End If
                                     End If
                                 End If
@@ -473,7 +473,7 @@ Sub Main
                 End If
             Next iC
         End If
-    Next iS
+    Next iSet
 
     ' ============================================================
     ' Section 7: Excel
@@ -543,14 +543,14 @@ Sub Main
         ' von Mises - envelope up
         bestS = -1
         bestV = 0.0
-        For iS = 0 To nS - 1
-            If okVM(iB, iS) <> 0 Then
-                If bestS < 0 Or pkVM(iB, iS) > bestV Then
-                    bestV = pkVM(iB, iS)
-                    bestS = iS
+        For iSet = 0 To nS - 1
+            If okVM(iB, iSet) <> 0 Then
+                If bestS < 0 Or pkVM(iB, iSet) > bestV Then
+                    bestV = pkVM(iB, iSet)
+                    bestS = iSet
                 End If
             End If
-        Next iS
+        Next iSet
         If bestS >= 0 Then
             wsLoc.Cells(r, 4).Value = bestV
             wsLoc.Cells(r, 5).Value = setName(bestS)
@@ -560,14 +560,14 @@ Sub Main
         ' max principal - envelope up
         bestS = -1
         bestV = 0.0
-        For iS = 0 To nS - 1
-            If okMX(iB, iS) <> 0 Then
-                If bestS < 0 Or pkMX(iB, iS) > bestV Then
-                    bestV = pkMX(iB, iS)
-                    bestS = iS
+        For iSet = 0 To nS - 1
+            If okMX(iB, iSet) <> 0 Then
+                If bestS < 0 Or pkMX(iB, iSet) > bestV Then
+                    bestV = pkMX(iB, iSet)
+                    bestS = iSet
                 End If
             End If
-        Next iS
+        Next iSet
         If bestS >= 0 Then
             wsLoc.Cells(r, 7).Value = bestV
             wsLoc.Cells(r, 8).Value = setName(bestS)
@@ -577,14 +577,14 @@ Sub Main
         ' min principal - envelope DOWN
         bestS = -1
         bestV = 0.0
-        For iS = 0 To nS - 1
-            If okMN(iB, iS) <> 0 Then
-                If bestS < 0 Or pkMN(iB, iS) < bestV Then
-                    bestV = pkMN(iB, iS)
-                    bestS = iS
+        For iSet = 0 To nS - 1
+            If okMN(iB, iSet) <> 0 Then
+                If bestS < 0 Or pkMN(iB, iSet) < bestV Then
+                    bestV = pkMN(iB, iSet)
+                    bestS = iSet
                 End If
             End If
-        Next iS
+        Next iSet
         If bestS >= 0 Then
             wsLoc.Cells(r, 10).Value = bestV
             wsLoc.Cells(r, 11).Value = setName(bestS)
@@ -747,7 +747,7 @@ Sub WriteGrid(ws As Object, caption As String, nB As Long, nS As Long, _
               pk() As Double, ok() As Integer, bDown As Long)
 
     Dim hdrRow As Long, firstRow As Long, lastRow As Long, lastCol As Long
-    Dim iB As Long, iS As Long, r As Long, c As Long
+    Dim iB As Long, iSet As Long, r As Long, c As Long
     hdrRow = 2
     firstRow = 3
     lastRow = firstRow + nB - 1
@@ -764,20 +764,20 @@ Sub WriteGrid(ws As Object, caption As String, nB As Long, nS As Long, _
 
     ws.Cells(hdrRow, 2).Value = "Bucket"
     ws.Cells(hdrRow, 3).Value = "Elements"
-    For iS = 0 To nS - 1
-        ws.Cells(hdrRow, 4 + iS).Value = setName(iS)
-    Next iS
+    For iSet = 0 To nS - 1
+        ws.Cells(hdrRow, 4 + iSet).Value = setName(iSet)
+    Next iSet
 
     For iB = 0 To nB - 1
         r = firstRow + iB
         ws.Cells(r, 2).Value = bName(iB)
         ws.Cells(r, 3).Value = bElems(iB)
-        For iS = 0 To nS - 1
+        For iSet = 0 To nS - 1
             ' Blank, not zero, where nothing qualified. See the README sheet.
-            If ok(iB, iS) <> 0 Then
-                ws.Cells(r, 4 + iS).Value = pk(iB, iS)
+            If ok(iB, iSet) <> 0 Then
+                ws.Cells(r, 4 + iSet).Value = pk(iB, iSet)
             End If
-        Next iS
+        Next iSet
     Next iB
 
     ws.Cells.Font.Name = "Calibri"
@@ -809,20 +809,20 @@ Sub WriteGrid(ws As Object, caption As String, nB As Long, nS As Long, _
         r = firstRow + iB
         bestC = -1
         bestV = 0.0
-        For iS = 0 To nS - 1
-            If ok(iB, iS) <> 0 Then
+        For iSet = 0 To nS - 1
+            If ok(iB, iSet) <> 0 Then
                 If bestC < 0 Then
-                    bestV = pk(iB, iS)
-                    bestC = iS
-                ElseIf bDown = 1 And pk(iB, iS) < bestV Then
-                    bestV = pk(iB, iS)
-                    bestC = iS
-                ElseIf bDown = 0 And pk(iB, iS) > bestV Then
-                    bestV = pk(iB, iS)
-                    bestC = iS
+                    bestV = pk(iB, iSet)
+                    bestC = iSet
+                ElseIf bDown = 1 And pk(iB, iSet) < bestV Then
+                    bestV = pk(iB, iSet)
+                    bestC = iSet
+                ElseIf bDown = 0 And pk(iB, iSet) > bestV Then
+                    bestV = pk(iB, iSet)
+                    bestC = iSet
                 End If
             End If
-        Next iS
+        Next iSet
         If bestC >= 0 Then
             ws.Cells(r, 4 + bestC).Interior.Color = RGB(255, 235, 200)
             ws.Cells(r, 4 + bestC).Font.Bold = True
