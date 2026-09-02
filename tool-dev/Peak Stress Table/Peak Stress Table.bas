@@ -612,8 +612,18 @@ Sub Main
         ' and with corner data that is tens of columns - the row loop below is
         ' the whole cost of the tool. Optional by design: if it is refused the
         ' result is only slower, never wrong.
+        ' *** VERIFY, DO NOT ASSUME ***
+        ' If bktSet.ID does not resolve the way this expects, DataNeeded narrows
+        ' Populate to the WRONG element set and every peak silently reads low.
+        ' The row count is checked against the bucketed element count below, so
+        ' a bad narrowing shows up as a number instead of as a wrong answer.
+        Dim useNarrow As Boolean
+        useNarrow = False
         On Error Resume Next
-        rbo.DataNeeded(8, bktSet.ID)
+        If bktSet.ID > 0 And bktSet.Count > 0 Then
+            rbo.DataNeeded(8, bktSet.ID)
+            useNarrow = True
+        End If
         On Error GoTo 0
 
         rc = rbo.Populate
@@ -625,6 +635,12 @@ Sub Main
                 If colOf(iC) >= 0 Then
                     rc = rbo.GetColumn(colOf(iC), vIDs, vVals)
                     If rc = FE_OK Then
+                        If iC = 0 Then
+                            App.feAppMessage(FCM_NORMAL, "      rows returned " _
+                                + Trim$(Str$(UBound(vVals) - LBound(vVals) + 1)) _
+                                + "   bucketed elements " + Trim$(Str$(bktSet.Count)) _
+                                + "   narrowed " + Trim$(Str$(useNarrow)))
+                        End If
                         For k = LBound(vVals) To UBound(vVals)
                             eID = vIDs(k)
                             iB = bkt(eID) - 1
