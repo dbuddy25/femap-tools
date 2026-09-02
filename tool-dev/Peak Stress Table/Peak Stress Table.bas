@@ -89,8 +89,12 @@ Sub Main
     viewNote = "no active view - defaulted to corner"
     Dim vw As Object
     Dim vwID As Long
+    ' feAppGetActiveView, NOT Info_ActiveID(FT_VIEW) - that returns 0 even with a
+    ' graphics window open, so this always fell through to the default and said
+    ' "no active view" while one was plainly on screen.
     On Error Resume Next
-    vwID = App.Info_ActiveID(FT_VIEW)
+    vwID = 0
+    If App.feAppGetActiveView(vwID) <> FE_OK Then vwID = 0
     If vwID > 0 Then
         Set vw = App.feView
         If vw.Get(vwID) = FE_OK Then

@@ -38,12 +38,18 @@ Sub Main
     ' ------------------------------------------------------------
     ' The active view
     ' ------------------------------------------------------------
-    ' FT_VIEW is 22. Info_ActiveID returns 0 when nothing is active, which for a
-    ' view means there is no graphics window to capture - worth failing on
-    ' loudly rather than saving an empty file.
+    ' *** NOT Info_ActiveID(FT_VIEW) ***
+    ' That returns 0 even with a graphics window open and focused - measured
+    ' twice, here and in Peak Stress Table, which silently fell back to its
+    ' default every run because of it. Views are not an "active entity" in the
+    ' sense Info_ActiveID reports on.
+    '
+    ' feAppGetActiveView takes the view ID as an OUT-param and returns FE_FAIL
+    ' when there genuinely is no active view.
     Dim viewID As Long
-    viewID = App.Info_ActiveID(FT_VIEW)
-    If viewID <= 0 Then
+    viewID = 0
+    rc = App.feAppGetActiveView(viewID)
+    If rc <> FE_OK Or viewID <= 0 Then
         App.feAppMessage(FCM_ERROR, "No active view - open a graphics window first.")
         Exit Sub
     End If
